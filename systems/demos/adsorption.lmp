@@ -1,0 +1,63 @@
+# 小吸附模型 - 测试用
+# 一个气体原子吸附在 FCC(100) 表面上
+
+units           metal
+atom_style      atomic
+boundary        p p f
+
+# --- 创建衬底 (FCC 铜) ---
+lattice         fcc 3.615              # Cu 晶格常数 3.615 Å
+region          box block 0 6 0 6 0 6  # 6x6x6 晶胞
+create_box      2 box                  # 两种原子类型: 1=衬底, 2=吸附物
+
+# 在底部 4 层放衬底原子
+lattice         fcc 3.615
+region          substrate block 0 6 0 6 0 4
+create_atoms    1 region substrate
+
+# --- 创建吸附原子 ---
+lattice         fcc 3.615
+region          adsorbate block 3 3 3 3 5 5
+create_atoms    2 region adsorbate      # 在表面上方的气体原子
+
+# --- 质量设置 ---
+mass            1 63.546                # Cu
+mass            2 39.948                # Ar
+
+# --- 势函数 ---
+pair_style      lj/cut 8.0
+pair_coeff      1 1 0.409 2.338        # Cu-Cu (UFF 近似)
+pair_coeff      2 2 0.0104 3.405       # Ar-Ar
+pair_coeff      1 2 0.065 2.87         # Cu-Ar (Lorentz-Berthelot 混合)
+
+# --- 冻结底部两层 ---
+group           mobile type 2
+group           frozen type 1
+group           substrate type 1
+
+# 冻结衬底原子，不让它们动
+fix             fsub1 frozen setforce 0 0 0
+
+# --- 设置 ---
+neighbor        0.3 bin
+neigh_modify    delay 0 every 1 check yes
+
+# --- 输出轨迹 (VMD 可用) ---
+# 相对路径按工作目录解析: 工作区演示: 拷入 lammps-data-docker/jobs/<id>/ 后 -w /data/jobs/<id>
+dump            dmp1 all custom 1 trajectory.lammpstrj id type x y z
+dump_modify     dmp1 sort id
+
+# --- 能量最小化 ---
+min_style       cg
+minimize        1e-6 1e-8 1000 10000
+
+# --- 短 MD 模拟，看原子振动 ---
+fix             fnve1 mobile nve
+fix             flang1 mobile langevin 300.0 300.0 0.1 12345
+timestep        0.001
+thermo          100
+run             5000
+
+# --- 输出 ---
+print "=== 吸附模拟完成 ==="
+print "轨迹文件: trajectory.lammpstrj (脚本同目录)"

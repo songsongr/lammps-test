@@ -1,0 +1,40 @@
+[project]
+name = "lammps-test"
+version = "0.1.0"
+description = "LAMMPS 分子动力学模拟: 带电表面 SrCl2 吸附 + 蒙脱石 CLAYFF 层间动力学"
+readme = "docs/README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "openpyxl",
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.4",
+    "jinja2>=3.1.6",
+]
+
+[project.scripts]
+# 一键化 CLI — 与 workbench 共用统一执行契约 (common.build / common.runner)
+build-sr        = "common.entrypoints:build_sr"
+run-sr-sim      = "common.entrypoints:run_sr_sim"
+analyze-sr      = "common.entrypoints:analyze_sr"
+build-mmt       = "common.entrypoints:build_mmt"
+run-mmt-sim     = "common.entrypoints:run_mmt_sim"
+postprocess-mmt = "common.entrypoints:postprocess_mmt"
+workbench       = "workbench.backend.app.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["common*", "workbench*"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

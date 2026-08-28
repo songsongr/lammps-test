@@ -1,0 +1,103 @@
+# SrCl2 在蒙脱石表面的吸附模拟
+# 力场: CLAYFF (黏土) + SPC/E (水) + 离子参数
+
+units                   real          # kcal/mol, Å
+atom_style              full
+boundary                p p f
+box                     tilt large
+
+# --- 读取体系 ---
+read_data               /data/strontium_adsorption/mmt_system.data
+
+# --- 分组 ---
+group                   mmt type 1 2 3 4 5    # 蒙脱石原子
+group                   water type 6 7         # 水分子
+group                   ions type 8 9          # 离子
+group                   mobile union water ions # 可移动部分
+
+# 固定衬底 (防止整体漂移，但表面保持刚性)
+group                   fixed type 1 2 3 4 5
+fix                     fsub1 fixed setforce 0 0 0
+
+# --- 力场设置 ---
+# CLAYFF: LJ + Coulomb
+pair_style              lj/cut/coul/cut 10.0 8.0
+pair_modify             mix arithmetic tail no
+
+# LJ 参数 (ε kcal/mol, σ Å)
+# Si
+pair_coeff              1 1 1.8405e-06 3.7064
+# Al
+pair_coeff              2 2 1.8405e-06 4.2708
+# O (桥氧/羟基氧/水氧)
+pair_coeff              3 3 0.1554 3.1655
+pair_coeff              4 4 0.1554 3.1655
+pair_coeff              6 6 0.1554 3.1655
+# Ho / Hw (只有库仑，无LJ)
+pair_coeff              5 5 0.0 1.0
+pair_coeff              7 7 0.0 1.0
+# Sr²⁺ (Joung-Cheatham 参数)
+pair_coeff              8 8 0.1 3.0
+# Cl⁻
+pair_coeff              9 9 0.1 4.0
+
+# 混合参数 (不同类型间) — 使用算术混合规则 (pair_modify mix arithmetic)
+# 不需要单独指定 cross-terms
+
+# --- 键/角 (水分子 SPC/E) ---
+bond_style              harmonic
+bond_coeff              1 554.1349 1.0      # O-H 键 (SPC/E 水)
+bond_coeff              2 554.1349 1.0      # O-H 键 (羟基, 未使用)
+
+angle_style             harmonic
+angle_coeff             1 45.7696 109.47    # H-O-H 角
+
+# --- 特殊键排除 ---
+special_bonds           lj 0.0 0.0 0.5 coul 0.0 0.0 0.5
+
+# --- 邻居列表 ---
+neighbor                2.0 bin
+neigh_modify            delay 0 every 1 check yes
+
+# --- 热力学输出 ---
+thermo                  100
+thermo_style            custom step temp pe ke etotal press density vol
+thermo_modify           lost ignore
+
+# --- 能量最小化 ---
+min_style               cg
+minimize                1e-4 1e-6 1000 10000
+
+write_data               /data/strontium_adsorption/minimized.data
+
+print "=== 最小化完成 ==="
+
+# --- 升温 (NVT, 300K) ---
+velocity                mobile create 300.0 12345 dist gaussian
+fix                     fnvt1 mobile nvt temp 300.0 300.0 100.0
+timestep                0.5          # fs
+thermo                  500
+run                     10000        # 5 ps
+
+write_restart            /data/strontium_adsorption/equil_300k.restart
+print "=== NVT 平衡完成 ==="
+
+# --- NPT 平衡 (同时平衡密度) ---
+fix                     fnpt1 mobile npt temp 300.0 300.0 100.0 iso 1.0 1.0 500.0
+run                     20000        # 10 ps
+
+write_restart            /data/strontium_adsorption/equil_npt.restart
+print "=== NPT 平衡完成 ==="
+
+# --- 生产模拟 (NVT, 收集轨迹) ---
+fix                     fnvt2 mobile nvt temp 300.0 300.0 100.0
+dump                    dmp1 all custom 100 /data/strontium_adsorption/production.dump id type x y z vx vy vz
+dump_modify             dmp1 sort id
+
+thermo                  1000
+reset_timestep           0
+run                     50000        # 25 ps
+
+write_restart            /data/strontium_adsorption/production.restart
+print "=== 生产模拟完成 ==="
+print "总模拟时间: 30 ps"

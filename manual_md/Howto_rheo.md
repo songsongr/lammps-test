@@ -1,0 +1,41 @@
+::::: {.document role="main" itemscope="itemscope" itemtype="https://schema.org/Article"}
+:::: {itemprop="articleBody"}
+[\\(\\renewcommand{\\AA}{\\text{Å}}\\)]{.math .notranslate .nohighlight}
+
+::: {#reproducing-hydrodynamics-and-elastic-objects-rheo .section}
+# [10.5.11. ]{.section-number}Reproducing hydrodynamics and elastic objects (RHEO)[](#reproducing-hydrodynamics-and-elastic-objects-rheo "Link to this heading"){.headerlink}
+
+The RHEO package is a hybrid implementation of smoothed particle hydrodynamics (SPH) for fluid flow, which can couple to the [[BPM package]{.doc}]Howto_bpm.md){.reference .internal} to model solid elements. RHEO combines these methods to enable mesh-free modeling of multi-phase material systems. Its SPH solver supports many advanced options including reproducing kernels, particle shifting, free surface identification, and solid surface reconstruction. To model fluid-solid systems, the status of particles can dynamically change between a fluid and solid state, e.g. during melting/solidification, which determines how they interact and their physical behavior. The package is designed with modularity in mind, so one can easily turn various features on/off, adjust physical details of the system, or develop new capabilities. For instance, the numerics associated with calculating gradients, reproducing kernels, etc. are separated into distinct classes to simplify the development of new integration schemes which can call these calculations. Additional numerical details can be found in [[(Palermo)]{.std .std-ref}](#howto-rheo-palermo){.reference .internal} and [[(Clemmer)]{.std .std-ref}](#howto-rheo-clemmer){.reference .internal}. Example movies illustrating some of these capabilities are found at [https://www.lammps.org/movies.html#rheopackage](https://www.lammps.org/movies.html#rheopackage){.reference .external}.
+
+Note, if you simply want to run a traditional SPH simulation, the [[SPH package]{.std .std-ref}]Packages_details.md#pkg-sph){.reference .internal} package is likely better suited for your application. It has fewer advanced features and therefore benefits from improved performance. The [[MACHDYN]{.std .std-ref}]Packages_details.md#pkg-machdyn){.reference .internal} package for solids may also be relevant for fluid-solid problems.
+
+------------------------------------------------------------------------
+
+At the core of the package is [[fix rheo]{.doc}]fix_rheo.md){.reference .internal} which integrates particle trajectories and controls many optional features (e.g. the use of reproducing kernels). In conjunction to fix rheo, one must specify an instance of [[fix rheo/pressure]{.doc}]fix_rheo_pressure.md){.reference .internal} and [[fix rheo/viscosity]{.doc}]fix_rheo_viscosity.md){.reference .internal} to define a pressure equation of state and viscosity model, respectively. Optionally, one can model a heat equation with [[fix rheo/thermal]{.doc}]fix_rheo_thermal.md){.reference .internal}, which also allows the user to specify equations for a particle's thermal conductivity, specific heat, latent heat, and melting temperature. The ordering of these fixes in an an input script matters. Fix rheo must be defined prior to all other RHEO fixes.
+
+Typically, RHEO requires atom style rheo. In addition to typical atom properties like positions and forces, particles store a local density, viscosity, pressure, and status. If thermal evolution is modeled, one must use atom style rheo/thermal which also includes a local energy, temperature, and conductivity. Note that the temperature is always derived from the energy. This implies the *temperature* attribute of [[the set command]{.doc}]set.md){.reference .internal} does not affect particles. Instead, one should use the *sph/e* attribute.
+
+The status variable uses bit-masking to track various properties of a particle such as its current state of matter (fluid or solid) and its location relative to a surface. Some of these properties (and others) can be accessed using [[compute rheo/property/atom]{.doc}]compute_rheo_property_atom.md){.reference .internal}. The *status* attribute in [[the set command]{.doc}]set.md){.reference .internal} only allows control over the first bit which sets the state of matter, 0 is fluid and 1 is solid.
+
+Fluid interactions, including pressure forces, viscous forces, and heat exchange, are calculated using [[pair rheo]{.doc}]pair_rheo.md){.reference .internal}. Unlike typical pair styles, pair rheo ignores the [[special bond]{.doc}]special_bonds.md){.reference .internal} settings. Instead, it determines whether to calculate forces based on the status of particles: e.g., hydrodynamic forces are only calculated if a fluid particle is involved.
+
+------------------------------------------------------------------------
+
+To model elastic objects, there are currently two mechanisms in RHEO, one designed for bulk solid bodies and the other for thin shells. Both mechanisms rely on introducing bonded forces between particles and therefore require a hybrid of atom style bond and rheo (or rheo/thermal).
+
+To create an elastic solid body, one has to (a) change the status of constituent particles to solid (e.g. with the [[set]{.doc}]set.md){.reference .internal} command), (b) create bpm bonds between the particles (see the [[bpm howto]{.doc}]Howto_bpm.md){.reference .internal} page for more details), and (c) use [[pair rheo/solid]{.doc}]pair_rheo_solid.md){.reference .internal} to apply repulsive contact forces between distinct solid bodies. Akin to pair rheo, pair rheo/solid considers a particle's fluid/solid phase to determine whether to apply forces. However, unlike pair rheo, pair rheo/solid does obey special bond settings such that contact forces do not have to be calculated between two bonded solid particles in the same elastic body.
+
+In systems with thermal evolution, fix rheo/thermal can optionally set a melting/solidification temperature allowing particles to dynamically swap their state between fluid and solid when the temperature exceeds or drops below the critical temperature, respectively. Using the *react* option, one can specify a maximum bond length and a bond type. Then, when solidifying, particles search their local neighbors and automatically create bonds with any neighboring solid particles in range. For BPM bond styles, bonds then use the immediate position of the two particles to calculate a reference state. When melting, particles delete any bonds of the specified type when reverting to a fluid state. Special bonds are updated as bonds are created/broken.
+
+The other option for elastic objects is an elastic shell that is nominally much thinner than a particle diameter, e.g. a oxide skin which gradually forms over time on the surface of a fluid. Currently, this is implemented using [[fix rheo/oxidation]{.doc}]fix_rheo_oxidation.md){.reference .internal} and bond style [[rheo/shell]{.doc}]bond_rheo_shell.md){.reference .internal}. Essentially, fix rheo/oxidation creates candidate bonds of a specified type between surface fluid particles within a specified distance. a newly created rheo/shell bond will then start a timer. While the timer is counting down, the bond will delete itself if particles move too far apart or move away from the surface. However, if the timer reaches a user-defined threshold, then the bond will activate and apply additional forces to the fluid particles. Bond style rheo/shell then operates very similarly to a BPM bond style, storing a reference length and breaking if stretched too far. Unlike the above method, this option does not remove the underlying fluid interactions (although particle shifting is turned off) and does not modify special bond settings of particles.
+
+While these two options are not expected to be appropriate for every system, either framework can be modified to create more suitable models (e.g. by changing the criteria for creating/deleting a bond or altering force calculations).
+
+------------------------------------------------------------------------
+
+**(Palermo)** Palermo, Wolf, Clemmer, O'Connor, Phys. Fluids, 36, 113337 (2024).
+
+**(Clemmer)** Clemmer, Pierce, O'Connor, Nevins, Jones, Lechman, Tencer, Appl. Math. Model., 130, 310-326 (2024).
+:::
+::::
+:::::

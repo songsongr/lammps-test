@@ -1,0 +1,171 @@
+# [generated] 本文件由方法模板 nvt_production 渲染生成 (体系: solution)
+# 重新渲染会覆盖本文件; 如需手改, 建议另存副本或在保存前确认覆盖提示。
+# 体系参数 (组成/力场/来源) 的单一真相源为本项目 system.json。
+
+# ============================================================
+# LAMMPS 模拟
+# ============================================================
+# 模板: nvt_production — 最小化 + NVT 平衡 + 生产 (9 板块规范)
+# 体系 profile: solution | 水模型: SPCE
+# 温度: 320.0 K | 时间步: 2.0 fs
+# 平衡: 100000 步 | 生产: 20000 步
+# 板块结构规范见 docs/workflows.md — 每个板块头说明其作用
+
+# ============================================================
+# 第 1 部分: 全局设置
+# ============================================================
+
+units                   real
+# units real — real 单位制: 能量 kcal/mol, 长度 Å, 质量 g/mol, 时间 fs, 电荷 e, 温度 K
+#   选择原因: 水模型与力场参数均以 kcal/mol / Å 惯例给出
+
+atom_style              full
+# atom_style full — 原子数据含 molecule-ID 与电荷 (水分子成键 + 库仑力都需要)
+
+boundary                p p p
+# boundary p p p — 三方向周期性边界; PPPM 长程静电要求全周期
+#   z 方向留真空层减弱周期镜像干扰
+
+# ============================================================
+# 第 2 部分: 读入体系数据
+# ============================================================
+
+read_data               system.data
+# read_data — 读入原子坐标/键/角/盒子/质量表 (由体系构建引擎从 system.json 生成)
+
+# ============================================================
+# 第 3 部分: 分组
+# ============================================================
+# 分组决定"谁被动过"——后续冻结/恒温/温度初始化都只作用于指定组
+
+group                   water type 1 2
+# group water — 水分子原子 (Ow=1, Hw=2)
+
+group                   ion_sr type 3
+# group ion_sr — 离子 Sr (+2.0)
+group                   ion_cl type 4
+# group ion_cl — 离子 Cl (-1.0)
+group                   mobile union water ion_sr ion_cl# group mobile — 全部可移动原子; 恒温器只作用于这个组
+
+# ============================================================
+# 第 4 部分: 非键力场 (LJ + 库仑)
+# ============================================================
+
+pair_style              lj/cut/coul/long 9.0 8.0
+# pair_style — LJ 12-6 (截断 8 Å) + 库仑 (短程 9 Å + 长程 PPPM)
+
+kspace_style            pppm 1e-4
+# kspace_style pppm 1e-4 — 长程静电 PPPM 求解, 力精度 1e-4 (标准值)
+
+pair_modify             mix arithmetic
+# pair_modify mix arithmetic — 交叉项混合规则: σ 取算术平均, ε 取几何平均
+#   只写同种对 (I I), 交叉对 (I J) 自动生成
+
+# --- 同种原子对 LJ 参数 (来源/置信度见注释; 数据源: system.json) ---
+pair_coeff              1 1 0.1553 3.166
+#   type 1 (Ow): ε=0.1553 kcal/mol, σ=3.166 Å
+#   来源: SPCE (Berendsen et al. 1987) | 置信度: 高
+pair_coeff              2 2 0.0 1.0
+#   type 2 (Hw): ε=0.0 kcal/mol, σ=1.0 Å
+#   来源: SPCE 标准 (H 无 LJ) | 置信度: 高
+pair_coeff              3 3 0.1 3.0
+#   type 3 (Sr): ε=0.1 kcal/mol, σ=3.0 Å
+#   来源: 随手设定, 无文献 | 置信度: 低
+#   参考: 候选: Aqvist 1990 / Mamatkulov 2013 / Li-Song-Merz 2015
+pair_coeff              4 4 0.1 4.0
+#   type 4 (Cl): ε=0.1 kcal/mol, σ=4.0 Å
+#   来源: 随手设定, 无文献 | 置信度: 低
+#   参考: 推荐替换 JC 2008 (SPC/E): eps=0.1000, sigma=4.045
+
+# ============================================================
+# 第 5 部分: 分子内力场 (刚性水)
+# ============================================================
+
+bond_style              harmonic
+# bond_style harmonic — 简谐键势 E = K_b (r - r0)^2 (SPC/E 几何约束用)
+
+bond_coeff              1 554.1349 1.0
+# bond_coeff 1 — O-H 键: K_b=554.13, r0=1.0 Å (SPC/E 标准参数)
+
+angle_style             harmonic
+# angle_style harmonic — 简谐角势 E = K_a (θ - θ0)^2
+
+angle_coeff             1 45.7696 109.47
+# angle_coeff 1 — H-O-H 角: K_a=45.77, θ0=109.47° (四面体角)
+
+special_bonds           lj 0.0 0.0 0.5 coul 0.0 0.0 0.5
+# special_bonds — 分子内 1-2/1-3 非键完全排除, 1-4 减半 (SPC/E 标准设置)
+
+# ============================================================
+# 第 6 部分: 模拟控制参数
+# ============================================================
+
+neighbor                2.0 bin
+# neighbor 2.0 bin — 近邻列表缓冲 2 Å, binning 算法
+
+thermo_modify           lost ignore flush yes
+# thermo_modify — lost ignore 忽略原子漂出警告; flush yes 实时刷新日志
+
+thermo                  2000
+# thermo 2000 — 平衡段热力学输出频率 (每 2000 步)
+
+# ============================================================
+# 第 7 部分: 能量最小化
+# ============================================================
+print "=== MINIMIZATION ==="
+
+min_style               cg
+# min_style cg — 共轭梯度最小化 (大体系标准选择)
+
+minimize                1e-4 1e-6 500 10000
+# minimize — 消除初始构型的原子重叠与应力, 为 NVT 提供合理起点
+
+print "=== MINIMIZATION DONE ==="
+
+# ============================================================
+# 第 7b 部分: SHAKE 约束 (必须在最小化之后、NVT 之前定义)
+# ============================================================
+# SHAKE 固定 O-H 键长与 H-O-H 角, 消除高频振动 → 步长可从 0.2 fs 提升到 2.0 fs
+
+fix                     fshake water shake 0.0001 20 100 b 1 a 1
+# fix shake — 作用组 water; b 1 a 1 = 约束全部 bond/angle type 1
+
+# ============================================================
+# 第 8 部分: NVT 平衡
+# ============================================================
+
+print "=== NVT ==="
+
+velocity                mobile create 320.0 12345
+# velocity create — 按 Maxwell-Boltzmann 分布初始化速度 (种子固定可复现)
+
+fix                     fnvt mobile nvt temp 320.0 320.0 100.0
+# fix nvt — Nose-Hoover 恒温器, 阻尼 100 fs, 只耦合 mobile 组
+
+timestep                2.0
+# timestep — 2.0 fs (SHAKE 刚性水下的标准步长)
+
+run                     100000
+# run 100000 — NVT 平衡, 时长 200.0 ps
+
+print "=== NVT DONE ==="
+
+# ============================================================
+# 第 9 部分: 生产模拟 (产出轨迹)
+# ============================================================
+
+print "=== PRODUCTION ==="
+
+dump                    dmp1 all custom 100 prod.lammpstrj id type x y z
+# dump — 每 100 步输出一帧轨迹 prod.lammpstrj (VMD/OVITO 可读)
+#   总帧数 ≈ 20000 / 100 = 200 帧
+#   物理时长: 40.0 ps
+
+thermo                  5000
+# thermo 5000 — 生产段热力学输出频率
+
+run                     20000
+# run 20000 — 生产模拟
+
+print "=== PRODUCTION DONE ==="
+# 日志出现此行 = 模拟正常结束

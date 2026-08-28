@@ -1,0 +1,73 @@
+:::::::::::::::: {.document role="main" itemscope="itemscope" itemtype="https://schema.org/Article"}
+::::::::::::::: {itemprop="articleBody"}
+[\\(\\renewcommand{\\AA}{\\text{Å}}\\)]{.math .notranslate .nohighlight}
+
+:::::::::::::: {#compute-erotate-rigid-command .section}
+[]{#index-0}
+
+# compute erotate/rigid command[](#compute-erotate-rigid-command "Link to this heading"){.headerlink}
+
+::::: {#syntax .section}
+## Syntax[](#syntax "Link to this heading"){.headerlink}
+
+:::: {.highlight-LAMMPS .notranslate}
+::: highlight
+    compute ID group-ID erotate/rigid fix-ID
+:::
+::::
+
+- ID, group-ID are documented in [[compute]{.doc}]compute.md){.reference .internal} command
+
+- erotate/rigid = style name of this compute command
+
+- fix-ID = ID of rigid body fix
+:::::
+
+::::: {#examples .section}
+## Examples[](#examples "Link to this heading"){.headerlink}
+
+:::: {.highlight-LAMMPS .notranslate}
+::: highlight
+    compute 1 all erotate/rigid myRigid
+:::
+::::
+:::::
+
+::: {#description .section}
+## Description[](#description "Link to this heading"){.headerlink}
+
+Define a computation that calculates the rotational kinetic energy of a collection of rigid bodies, as defined by one of the [[fix rigid]{.doc}]fix_rigid.md){.reference .internal} command variants.
+
+The rotational energy of each rigid body is computed as [\\(\\frac12 I \\omega\_\\text{body}\^2\\)]{.math .notranslate .nohighlight}, where [\\(I\\)]{.math .notranslate .nohighlight} is the inertia tensor for the rigid body and [\\(\\omega\_\\text{body}\\)]{.math .notranslate .nohighlight} is its angular velocity vector. Both [\\(I\\)]{.math .notranslate .nohighlight} and [\\(\\omega\_\\text{body}\\)]{.math .notranslate .nohighlight} are in the frame of reference of the rigid body (i.e., [\\(I\\)]{.math .notranslate .nohighlight} is diagonal).
+
+The *fix-ID* should be the ID of one of the [[fix rigid]{.doc}]fix_rigid.md){.reference .internal} commands which defines the rigid bodies. The group specified in the compute command is ignored. The rotational energy of all the rigid bodies defined by the fix rigid command in included in the calculation.
+:::
+
+::: {#output-info .section}
+## Output info[](#output-info "Link to this heading"){.headerlink}
+
+This compute calculates a global scalar (the summed rotational energy of all the rigid bodies). This value can be used by any command that uses a global scalar value from a compute as input. See the [[Howto output]{.doc}]Howto_output.md){.reference .internal} page for an overview of LAMMPS output options.
+
+The scalar value calculated by this compute is "extensive". The scalar value will be in energy [[units]{.doc}]units.md){.reference .internal}.
+:::
+
+::: {#restrictions .section}
+## Restrictions[](#restrictions "Link to this heading"){.headerlink}
+
+This compute is part of the RIGID package. It is only enabled if LAMMPS was built with that package. See the [[Build package]{.doc}]Build_package.md){.reference .internal} page for more info.
+:::
+
+::: {#related-commands .section}
+## Related commands[](#related-commands "Link to this heading"){.headerlink}
+
+[[compute ke/rigid]{.doc}]compute_ke_rigid.md){.reference .internal}
+:::
+
+::: {#default .section}
+## Default[](#default "Link to this heading"){.headerlink}
+
+none
+:::
+::::::::::::::
+:::::::::::::::
+::::::::::::::::

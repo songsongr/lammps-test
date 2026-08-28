@@ -1,0 +1,140 @@
+# SrCl2 吸附模拟 v2 - 带电表面模型
+# 表面 = 带电 FCC 结构 (简化蒙脱石)
+
+units                   real
+atom_style              full
+boundary                p p f
+
+# === 1. 建表面 ===
+# 表面层: 类似于蒙脱石的带电表面
+lattice                 fcc 4.0
+region                  surf_box block 0 5 0 5 0 3
+create_box              5 surf_box   # atom types: 1=Si, 2=Ow, 3=Hw, 4=Sr, 5=Cl
+
+# 两层表面原子 (代表四面体片)
+lattice                 fcc 4.0
+region                  slab1 block 0 5 0 5 0 1
+create_atoms            1 region slab1      # 下层 (Si-like)
+
+region                  slab2 block 0 5 0 5 1 2
+create_atoms            1 region slab2      # 上层 (Si-like)
+
+# 给表面加一些负电荷来模拟 MMT 的层电荷
+# 随机替换一些 Si 为电荷补偿 (简化: 直接给表面原子赋电荷)
+set                     type 1 charge -0.5  # 表面负电荷 (模拟 MMT 层电荷)
+
+# === 2. 加水 ===
+# SPC/E 水模型参数
+# 在表面上方的区域随机放置水分子
+region                  water_box block 0 20 0 20 2 12
+
+# 用 simple cubic 格子放置水
+lattice                 sc 3.0
+create_atoms            2 region water_box  # Ow
+
+# H 原子 (简单位置近似)
+# 在实际模拟中，水应该用完整的 SPC/E 模型
+# 这里简化: 只放 O (表示水), 加背景介电常数
+
+# === 3. 加离子 ===
+# 计算 0.25 mol/L SrCl2 需要的离子数
+# 盒子体积: 20×20×10 = 4000 Å³ (水层)
+# n = C × V × NA = 0.25 × 4000×1e-27 × 6.022e23 ≈ 0.6
+# 太小了，放大盒子到 40×40×20
+# 重新建...
+
+print "简化模型: 盒子太小, 离子数不够统计意义"
+print "推荐: 用 >50000 原子的体系做真实模拟"
+print "此处展示 LAMMPS 吸附模拟工作流"
+
+# === 简化: 用固定的点电荷场 + 少量水分子 ===
+clear
+
+# 重新创建小体系演示吸附过程
+units           real
+atom_style      full
+boundary        p p f
+
+# 一个小型演示体系
+lattice         fcc 3.0
+region          box block 0 3 0 3 0 5
+create_box      4 box
+
+# 表面层 (3层原子)
+lattice         fcc 3.0
+region          surf1 block 0 3 0 3 0 1
+create_atoms    1 region surf1      # 表面原子 (带负电)
+region          surf2 block 0 3 0 3 1 2
+create_atoms    1 region surf2
+
+# 水分子 (简单立方)
+lattice         sc 3.5
+region          water_region block 0 3 0 3 2 4
+create_atoms    2 region water_region  # 水氧
+
+# Sr 离子
+lattice         sc 3.5
+region          sr_region block 1 2 1 2 3 4
+create_atoms    3 region sr_region      # Sr
+
+# Cl 离子
+lattice         sc 3.5
+region          cl_region block 0 1 0 1 3 4
+create_atoms    4 region cl_region      # Cl
+
+# 电荷
+set             type 1 charge -0.2
+set             type 2 charge -0.82     # Ow
+set             type 3 charge 2.0       # Sr²⁺
+set             type 4 charge -1.0      # Cl⁻
+
+# 质量
+mass            1 28.0855
+mass            2 15.9994
+mass            3 87.6200
+mass            4 35.4530
+
+# === 固定表面 ===
+group           surface type 1
+group           mobile type 2 3 4
+group           sr type 3
+group           cl type 4
+
+fix             fsurf1 surface setforce 0 0 0
+
+# === 力场 ===
+pair_style      lj/cut/coul/long 10.0 10.0
+pair_modify     mix arithmetic
+kspace_style    pppm 1e-4
+
+pair_coeff      1 1 0.1554 3.1655
+pair_coeff      2 2 0.1554 3.1655
+pair_coeff      3 3 0.1 3.0
+pair_coeff      4 4 0.1 4.0
+
+# === 模拟 ===
+neighbor        2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+thermo          100
+thermo_style    custom step temp pe ke etotal press
+
+# 能量最小化
+min_style       cg
+minimize        1e-4 1e-6 500 5000
+
+print "=== 最小化完成 ==="
+
+# NVT 升温
+velocity        mobile create 300.0 12345
+fix             fnvt mobile nvt temp 300.0 300.0 100.0
+timestep        0.5
+run             5000
+
+print "=== NVT 平衡完成 ==="
+
+# 生产模拟
+dump            dmp1 all custom 50 /data/strontium_adsorption/sr_adsorb.dump id type x y z
+run             10000
+
+print "=== 生产模拟完成 ==="

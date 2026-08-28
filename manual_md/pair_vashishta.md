@@ -1,0 +1,186 @@
+:::::::::::::::::::: {.document role="main" itemscope="itemscope" itemtype="https://schema.org/Article"}
+::::::::::::::::::: {itemprop="articleBody"}
+[\\(\\renewcommand{\\AA}{\\text{Å}}\\)]{.math .notranslate .nohighlight}
+
+::: {#pair-style-vashishta-command .section}
+[]{#index-5}[]{#index-4}[]{#index-3}[]{#index-2}[]{#index-1}[]{#index-0}
+
+# pair_style vashishta command[](#pair-style-vashishta-command "Link to this heading"){.headerlink}
+
+Accelerator Variants: *vashishta/gpu*, *vashishta/omp*, *vashishta/kk*
+:::
+
+::::::::::::::::: {#pair-style-vashishta-table-command .section}
+# pair_style vashishta/table command[](#pair-style-vashishta-table-command "Link to this heading"){.headerlink}
+
+Accelerator Variants: *vashishta/table/omp*
+
+::::: {#syntax .section}
+## Syntax[](#syntax "Link to this heading"){.headerlink}
+
+:::: {.highlight-LAMMPS .notranslate}
+::: highlight
+    pair_style style args
+:::
+::::
+
+- style = *vashishta* or *vashishta/table*
+
+- args = list of arguments for a particular style
+
+``` literal-block
+vashishta args = none
+vashishta/table args = Ntable cutinner
+  Ntable = # of tabulation points
+  cutinner = tablulate from cutinner to cutoff
+```
+:::::
+
+::::: {#examples .section}
+## Examples[](#examples "Link to this heading"){.headerlink}
+
+:::: {.highlight-LAMMPS .notranslate}
+::: highlight
+    pair_style vashishta
+    pair_coeff * * SiC.vashishta Si C
+
+    pair_style vashishta/table 100000 0.2
+    pair_coeff * * SiC.vashishta Si C
+:::
+::::
+:::::
+
+:::::: {#description .section}
+## Description[](#description "Link to this heading"){.headerlink}
+
+The *vashishta* and *vashishta/table* styles compute the combined 2-body and 3-body family of potentials developed in the group of Priya Vashishta and collaborators. By combining repulsive, screened Coulombic, screened charge-dipole, and dispersion interactions with a bond-angle energy based on the Stillinger-Weber potential, this potential has been used to describe a variety of inorganic compounds, including SiO2 [[Vashishta1990]{.std .std-ref}](#vashishta1990){.reference .internal}, SiC [[Vashishta2007]{.std .std-ref}](#vashishta2007){.reference .internal}, and InP [[Branicio2009]{.std .std-ref}](#branicio2009){.reference .internal}.
+
+The potential for the energy U of a system of atoms is
+
+::: {.math .notranslate .nohighlight}
+\\\[\\begin{split}U & = \\sum_i\^N \\sum\_{j \> i}\^N U\_{ij}\^{(2)} (r\_{ij}) + \\sum_i\^N \\sum\_{j \\neq i}\^N \\sum\_{k \> j, k \\neq i}\^N U\_{ijk}\^{(3)} (r\_{ij}, r\_{ik}, \\theta\_{ijk}) \\\\ U\_{ij}\^{(2)} (r) & = \\frac{H\_{ij}}{r\^{\\eta\_{ij}}} + \\frac{Z_i Z_j}{r}\\exp(-r/\\lambda\_{1,ij}) - \\frac{D\_{ij}}{r\^4}\\exp(-r/\\lambda\_{4,ij}) - \\frac{W\_{ij}}{r\^6}, r \< r\_{c,{ij}} \\\\ U\_{ijk}\^{(3)}(r\_{ij},r\_{ik},\\theta\_{ijk}) & = B\_{ijk} \\frac{\\left\[ \\cos \\theta\_{ijk} - \\cos \\theta\_{0ijk} \\right\]\^2} {1+C\_{ijk}\\left\[ \\cos \\theta\_{ijk} - \\cos \\theta\_{0ijk} \\right\]\^2} \\times \\\\ & \\exp \\left( \\frac{\\gamma\_{ij}}{r\_{ij} - r\_{0,ij}} \\right) \\exp \\left( \\frac{\\gamma\_{ik}}{r\_{ik} - r\_{0,ik}} \\right), r\_{ij} \< r\_{0,ij}, r\_{ik} \< r\_{0,ik}\\end{split}\\\]
+:::
+
+where we follow the notation used in [[Branicio2009]{.std .std-ref}](#branicio2009){.reference .internal}. [\\(U\^2\\)]{.math .notranslate .nohighlight} is a two-body term and U3 is a three-body term. The summation over two-body terms is over all neighbors J within a cutoff distance = [\\(r_c\\)]{.math .notranslate .nohighlight}. The twobody terms are shifted and tilted by a linear function so that the energy and force are both zero at [\\(r_c\\)]{.math .notranslate .nohighlight}. The summation over three-body terms is over all neighbors *i* and *k* within a cut-off distance [\\(= r_0\\)]{.math .notranslate .nohighlight}, where the exponential screening function becomes zero.
+
+The *vashishta* style computes these formulas analytically. The *vashishta/table* style tabulates the analytic values for *Ntable* points from cutinner to the cutoff of the potential. The points are equally spaced in R\^2 space from cutinner\^2 to cutoff\^2. For the two-body term in the above equation, a linear interpolation for each pairwise distance between adjacent points in the table. In practice the tabulated version can run 3-5x faster than the analytic version with moderate to little loss of accuracy for Ntable values between 10000 and 1000000. It is not recommended to use less than 5000 tabulation points.
+
+Only a single pair_coeff command is used with either style which specifies a Vashishta potential file with parameters for all needed elements. These are mapped to LAMMPS atom types by specifying N additional arguments after the filename in the pair_coeff command, where N is the number of LAMMPS atom types:
+
+- filename
+
+- N element names = mapping of Vashishta elements to atom types
+
+See the [[pair_coeff]{.doc}]pair_coeff.md){.reference .internal} page for alternate ways to specify the path for the potential file.
+
+As an example, imagine a file SiC.vashishta has parameters for Si and C. If your LAMMPS simulation has 4 atoms types and you want the first 3 to be Si, and the fourth to be C, you would use the following pair_coeff command:
+
+:::: {.highlight-LAMMPS .notranslate}
+::: highlight
+    pair_coeff * * SiC.vashishta Si Si Si C
+:::
+::::
+
+The first 2 arguments must be \* \* so as to span all LAMMPS atom types. The first three Si arguments map LAMMPS atom types 1,2,3 to the Si element in the file. The final C argument maps LAMMPS atom type 4 to the C element in the file. If a mapping value is specified as NULL, the mapping is not performed. This can be used when a *vashishta* potential is used as part of the *hybrid* pair style. The NULL values are placeholders for atom types that will be used with other potentials.
+
+Vashishta files in the *potentials* directory of the LAMMPS distribution have a ".vashishta" suffix. Lines that are not blank or comments (starting with #) define parameters for a triplet of elements. The parameters in a single entry correspond to the two-body and three-body coefficients in the formulae above:
+
+- element 1 (the center atom in a 3-body interaction)
+
+- element 2
+
+- element 3
+
+- *H* (energy units)
+
+- [\\(\\eta\\)]{.math .notranslate .nohighlight}
+
+- [\\(Z_i\\)]{.math .notranslate .nohighlight} (electron charge units)
+
+- [\\(Z_j\\)]{.math .notranslate .nohighlight} (electron charge units)
+
+- [\\(\\lambda_1\\)]{.math .notranslate .nohighlight} (distance units)
+
+- *D* (energy units)
+
+- [\\(\\lambda_4\\)]{.math .notranslate .nohighlight} (distance units)
+
+- *W* (energy units)
+
+- [\\(r_c\\)]{.math .notranslate .nohighlight} (distance units)
+
+- *B* (energy units)
+
+- [\\(\\gamma\\)]{.math .notranslate .nohighlight}
+
+- [\\(r_0\\)]{.math .notranslate .nohighlight} (distance units)
+
+- *C*
+
+- [\\(\\cos\\theta_0\\)]{.math .notranslate .nohighlight}
+
+The non-annotated parameters are unitless. The Vashishta potential file must contain entries for all the elements listed in the pair_coeff command. It can also contain entries for additional elements not being used in a particular simulation; LAMMPS ignores those entries. For a single-element simulation, only a single entry is required (e.g. SiSiSi). For a two-element simulation, the file must contain 8 entries (for SiSiSi, SiSiC, SiCSi, SiCC, CSiSi, CSiC, CCSi, CCC), that specify parameters for all permutations of the two elements interacting in three-body configurations. Thus for 3 elements, 27 entries would be required, etc.
+
+Depending on the particular version of the Vashishta potential, the values of these parameters may be keyed to the identities of zero, one, two, or three elements. In order to make the input file format unambiguous, general, and simple to code, LAMMPS uses a slightly confusing method for specifying parameters. All parameters are divided into two classes: two-body and three-body. Two-body and three-body parameters are handled differently, as described below. The two-body parameters are *H*, [\\(\\eta\\)]{.math .notranslate .nohighlight}, [\\(\\lambda_1\\)]{.math .notranslate .nohighlight}, *D*, [\\(\\lambda_4\\)]{.math .notranslate .nohighlight}, *W*, [\\(r_c\\)]{.math .notranslate .nohighlight}, [\\(\\gamma\\)]{.math .notranslate .nohighlight}, and [\\(r_0\\)]{.math .notranslate .nohighlight}. They appear in the above formulae with two subscripts. The parameters [\\(Z_i\\)]{.math .notranslate .nohighlight} and [\\(Z_j\\)]{.math .notranslate .nohighlight} are also classified as two-body parameters, even though they only have 1 subscript. The three-body parameters are *B*, *C*, [\\(\\cos\\theta_0\\)]{.math .notranslate .nohighlight}. They appear in the above formulae with three subscripts. Two-body and three-body parameters are handled differently, as described below.
+
+The first element in each entry is the center atom in a three-body interaction, while the second and third elements are two neighbor atoms. Three-body parameters for a central atom I and two neighbors J and K are taken from the IJK entry. Note that even though three-body parameters do not depend on the order of J and K, LAMMPS stores three-body parameters for both IJK and IKJ. The user must ensure that these values are equal. Two-body parameters for an atom I interacting with atom J are taken from the IJJ entry, where the second and third elements are the same. Thus the two-body parameters for Si interacting with C come from the SiCC entry. Note that even though two-body parameters (except possibly gamma and r0 in U3) do not depend on the order of the two elements, LAMMPS will get the Si-C value from the SiCC entry and the C-Si value from the CSiSi entry. The user must ensure that these values are equal. Two-body parameters appearing in entries where the second and third elements are different are stored but never used. It is good practice to enter zero for these values. Note that the three-body function U3 above contains the two-body parameters [\\(\\gamma\\)]{.math .notranslate .nohighlight} and [\\(r_0\\)]{.math .notranslate .nohighlight}. So U3 for a central C atom bonded to an Si atom and a second C atom will take three-body parameters from the CSiC entry, but two-body parameters from the CCC and CSiSi entries.
+
+------------------------------------------------------------------------
+
+Styles with a *gpu*, *intel*, *kk*, *omp*, or *opt* suffix are functionally the same as the corresponding style without the suffix. They have been optimized to run faster, depending on your available hardware, as discussed on the [[Accelerator packages]{.doc}]Speed_packages.md){.reference .internal} page. The accelerated styles take the same arguments and should produce the same results, except for round-off and precision issues.
+
+These accelerated styles are part of the GPU, INTEL, KOKKOS, OPENMP, and OPT packages, respectively. They are only enabled if LAMMPS was built with those packages. See the [[Build package]{.doc}]Build_package.md){.reference .internal} page for more info.
+
+You can specify the accelerated styles explicitly in your input script by including their suffix, or you can use the [[-suffix command-line switch]{.doc}]Run_options.md){.reference .internal} when you invoke LAMMPS, or you can use the [[suffix]{.doc}]suffix.md){.reference .internal} command in your input script.
+
+See the [[Accelerator packages]{.doc}]Speed_packages.md){.reference .internal} page for more instructions on how to use the accelerated styles effectively.
+::::::
+
+------------------------------------------------------------------------
+
+::: {#mixing-shift-table-tail-correction-restart-rrespa-info .section}
+## Mixing, shift, table, tail correction, restart, rRESPA info[](#mixing-shift-table-tail-correction-restart-rrespa-info "Link to this heading"){.headerlink}
+
+For atom type pairs I,J and I != J, where types I and J correspond to two different element types, mixing is performed by LAMMPS as described above from values in the potential file.
+
+This pair style does not support the [[pair_modify]{.doc}]pair_modify.md){.reference .internal} shift, table, and tail options.
+
+This pair style does not write its information to [[binary restart files]{.doc}]restart.md){.reference .internal}, since it is stored in potential files. Thus, you need to re-specify the pair_style and pair_coeff commands in an input script that reads a restart file.
+
+This pair style can only be used via the *pair* keyword of the [[run_style respa]{.doc}]run_style.md){.reference .internal} command. It does not support the *inner*, *middle*, *outer* keywords.
+:::
+
+------------------------------------------------------------------------
+
+::: {#restrictions .section}
+## Restrictions[](#restrictions "Link to this heading"){.headerlink}
+
+These pair styles are part of the MANYBODY package. They are only enabled if LAMMPS was built with that package. See the [[Build package]{.doc}]Build_package.md){.reference .internal} page for more info.
+
+These pair styles requires the [[newton]{.doc}]newton.md){.reference .internal} setting to be "on" for pair interactions.
+
+The Vashishta potential files provided with LAMMPS (see the potentials directory) are parameterized for metal [[units]{.doc}]units.md){.reference .internal}. You can use the Vashishta potential with any LAMMPS units, but you would need to create your own potential file with coefficients listed in the appropriate units if your simulation does not use "metal" units.
+:::
+
+::: {#related-commands .section}
+## Related commands[](#related-commands "Link to this heading"){.headerlink}
+
+[[pair_coeff]{.doc}]pair_coeff.md){.reference .internal}
+:::
+
+::: {#default .section}
+## Default[](#default "Link to this heading"){.headerlink}
+
+none
+
+------------------------------------------------------------------------
+
+**(Vashishta1990)** P. Vashishta, R. K. Kalia, J. P. Rino, Phys. Rev. B 41, 12197 (1990).
+
+**(Vashishta2007)** P. Vashishta, R. K. Kalia, A. Nakano, J. P. Rino. J. Appl. Phys. 101, 103515 (2007).
+
+**(Branicio2009)** Branicio, Rino, Gan and Tsuzuki, J. Phys Condensed Matter 21 (2009) 095002
+:::
+:::::::::::::::::
+:::::::::::::::::::
+::::::::::::::::::::

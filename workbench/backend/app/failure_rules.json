@@ -1,0 +1,112 @@
+{
+  "_comment": "策展错误案例库: 错误签名(正则) → 原因 → severity/actions/can_resume。编辑后即时生效 (每次分析时加载)。severity: high=结果不可信必须修 / medium=可调参重跑 / low=环境性; can_resume=存在从既有状态续跑的策略。",
+  "lmp_rules": [
+    {
+      "signature": "Package command after simulation box",
+      "hint": "`package` 命令必须写在盒子定义 (units / read_data 等) 之前。线程数应通过命令行 `-pk omp N` 统一设置, 删除脚本中位于 read_data 之后的 package 行。",
+      "severity": "high",
+      "can_resume": false,
+      "actions": [
+        "删除脚本中位于 read_data 之后的 package 行",
+        "线程数改由命令行 -pk omp N 设置 (工作台发车时已自动附加)"
+      ]
+    },
+    {
+      "signature": "Cannot open",
+      "hint": "文件无法打开: read_data / include / dump 等引用的文件不存在或路径不对; 确认该文件已在项目目录中 (依赖会被自动暂存到任务工作区)。",
+      "severity": "high",
+      "can_resume": false,
+      "actions": [
+        "按错误行确认缺失的文件名",
+        "把文件放入项目目录 (相对路径引用), 重新发起任务",
+        "发车前的 lint 检查会在任务卡页面提示引用缺失, 可先行修复"
+      ]
+    },
+    {
+      "signature": "Lost atoms",
+      "hint": "原子丢失: 常见原因为初始构型原子重叠、时间步过大或跳过了能量最小化; 检查体系生成与 minimize 设置。",
+      "severity": "high",
+      "can_resume": false,
+      "actions": [
+        "检查体系生成的原子间距 (是否重叠)",
+        "在正式 run 前补充能量最小化 (minimize)",
+        "减小时间步长后重跑"
+      ]
+    },
+    {
+      "signature": "Non-numeric|is nan|is inf",
+      "hint": "数值发散 (nan / inf / 非数值): 检查时间步长是否过大、力场参数是否合理、初始构型是否有原子重叠。",
+      "severity": "high",
+      "can_resume": true,
+      "actions": [
+        "减小 timestep (real 单位常用 1.0 fs 以下)",
+        "核对体系配置页的力场参数 (ε/σ/电荷) 与来源标注",
+        "若有 restart 文件: 从最近的 restart 以更小步长续跑, 已跑部分仍有效"
+      ]
+    },
+    {
+      "signature": "Unknown command|Invalid .*style|Illegal",
+      "hint": "命令或风格无效: 可能是拼写错误, 或当前容器内 LAMMPS 版本 (2021.07) 不支持该语法; 可在 manual_md/ 手册库中检索对应命令。",
+      "severity": "high",
+      "can_resume": false,
+      "actions": [
+        "在 manual_md/ 手册库检索该命令的合法语法",
+        "对照容器内 LAMMPS 版本 (2021.07) 确认命令可用性"
+      ]
+    },
+    {
+      "signature": "[Oo]ut of memory|Cannot allocate",
+      "hint": "内存不足: 体系过大或近邻列表超限; 尝试减小体系规模或降低并行规模。",
+      "severity": "medium",
+      "can_resume": false,
+      "actions": [
+        "减小体系规模 (nx/ny/水层厚度)",
+        "降低 OMP 线程数后重试",
+        "检查 neighbor 列表参数是否过大"
+      ]
+    }
+  ],
+  "python_rules": [
+    {
+      "signature": "ModuleNotFoundError: No module named '([^']+)'",
+      "hint": "缺少依赖 `{0}`: 在项目虚拟环境中 `uv add {0}` 后重试。",
+      "severity": "low",
+      "can_resume": false,
+      "actions": ["uv add {0} 安装缺失依赖", "重新发起分析任务"]
+    },
+    {
+      "signature": "FileNotFoundError.*?'([^']+)'",
+      "hint": "文件不存在: `{0}`。检查分析脚本的输入文件是否生成, 以及工作目录约定 (输出到脚本同目录)。",
+      "severity": "medium",
+      "can_resume": false,
+      "actions": [
+        "确认输入文件 (轨迹/log) 是否已由上游任务生成",
+        "从对应任务详情页确认产物文件名与路径"
+      ]
+    },
+    {
+      "signature": "KeyError: '([^']*)'",
+      "hint": "字典缺少键 `{0}`: 输入文件的列名/字段与解析预期不符 (常见于轨迹格式变化)。",
+      "severity": "medium",
+      "can_resume": false,
+      "actions": ["检查输入文件的列名/格式是否与脚本预期一致", "确认 dump 命令输出的字段集合"]
+    },
+    {
+      "signature": "IndentationError|SyntaxError",
+      "hint": "Python 语法错误: 按错误行定位脚本位置修正。",
+      "severity": "high",
+      "can_resume": false,
+      "actions": ["按错误行号修正脚本语法", "工作台在线编辑保存后重新发起"]
+    },
+    {
+      "signature": "TypeError: build\\(\\) got an unexpected keyword argument",
+      "hint": "构建器接口与调用方不一致: builder 的 build() 签名缺少 project_dir 参数 (2026-08-28 起构建引擎传入项目目录)。",
+      "severity": "high",
+      "can_resume": false,
+      "actions": [
+        "核对 common/builders/ 下对应 builder 的 build(cfg, rng, project_dir=None) 签名",
+        "确认没有混用旧版归档脚本与新版构建引擎"
+      ]
+    }
+  ]
+}

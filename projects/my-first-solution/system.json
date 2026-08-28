@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "profile": "solution",
+  "seed": 42,
+  "water_model": "SPCE",
+  "geometry": {
+    "box": {
+      "x": 30.0,
+      "y": 30.0,
+      "z": 30.0
+    },
+    "water": {
+      "grid": 3.2
+    }
+  },
+  "ions": {
+    "conc_mol": 1.0
+  },
+  "atom_types": [
+    {
+      "name": "Ow",
+      "charge": -0.8476,
+      "mass": 15.9994,
+      "eps": 0.1553,
+      "sigma": 3.166,
+      "source": "SPCE (Berendsen et al. 1987)",
+      "confidence": "高",
+      "id": 1
+    },
+    {
+      "name": "Hw",
+      "charge": 0.4238,
+      "mass": 1.0079,
+      "eps": 0.0,
+      "sigma": 1.0,
+      "source": "SPCE 标准 (H 无 LJ)",
+      "confidence": "高",
+      "id": 2
+    },
+    {
+      "name": "Sr",
+      "charge": 2.0,
+      "mass": 87.62,
+      "eps": 0.1,
+      "sigma": 3.0,
+      "source": "随手设定, 无文献",
+      "confidence": "低",
+      "ref": "候选: Aqvist 1990 / Mamatkulov 2013 / Li-Song-Merz 2015",
+      "id": 3
+    },
+    {
+      "name": "Cl",
+      "charge": -1.0,
+      "mass": 35.453,
+      "eps": 0.1,
+      "sigma": 4.0,
+      "source": "随手设定, 无文献",
+      "confidence": "低",
+      "ref": "推荐替换 JC 2008 (SPC/E): eps=0.1000, sigma=4.045",
+      "id": 4
+    }
+  ]
+}

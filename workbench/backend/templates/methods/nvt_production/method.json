@@ -1,0 +1,15 @@
+{
+  "id": "nvt_production",
+  "name": "最小化 + NVT 平衡 + 生产",
+  "description": "能量最小化 → SHAKE 刚性水 → NVT 平衡 → 生产出轨迹 (复刻 SrCl₂ 吸附主流程, 按 workflows.md 9 板块规范生成)",
+  "params": [
+    {"key": "temperature", "label": "目标温度 (K)", "type": "number", "default": 300.0},
+    {"key": "timestep_fs", "label": "时间步 (fs)", "type": "number", "default": 2.0,
+     "note": "SHAKE 刚性水下 2.0 fs 是水溶液标准值"},
+    {"key": "equil_steps", "label": "NVT 平衡步数", "type": "int", "default": 100000},
+    {"key": "prod_steps", "label": "生产步数", "type": "int", "default": 50000},
+    {"key": "dump_interval", "label": "轨迹输出间隔 (步)", "type": "int", "default": 100},
+    {"key": "do_minimize", "label": "先做能量最小化", "type": "bool", "default": true},
+    {"key": "velocity_seed", "label": "速度初始化种子", "type": "int", "default": 12345}
+  ]
+}

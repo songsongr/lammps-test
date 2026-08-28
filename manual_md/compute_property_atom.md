@@ -1,0 +1,229 @@
+::::::::::::::::::::: {.document role="main" itemscope="itemscope" itemtype="https://schema.org/Article"}
+:::::::::::::::::::: {itemprop="articleBody"}
+[\\(\\renewcommand{\\AA}{\\text{Å}}\\)]{.math .notranslate .nohighlight}
+
+::::::::::::::::::: {#compute-property-atom-command .section}
+[]{#index-0}
+
+# compute property/atom command[](#compute-property-atom-command "Link to this heading"){.headerlink}
+
+::::: {#syntax .section}
+## Syntax[](#syntax "Link to this heading"){.headerlink}
+
+:::: {.highlight-LAMMPS .notranslate}
+::: highlight
+    compute ID group-ID property/atom input1 input2 ...
+:::
+::::
+
+- ID, group-ID are documented in [[compute]{.doc}]compute.md){.reference .internal} command
+
+- property/atom = style name of this compute command
+
+- input = one or more atom attributes
+
+  :::: {.highlight-none .notranslate}
+  ::: highlight
+      possible attributes = id, mol, proc, type, mass,
+                            x, y, z, xs, ys, zs, xu, yu, zu, ix, iy, iz,
+                            vx, vy, vz, fx, fy, fz,
+                            q, mux, muy, muz, mu,
+                            spx, spy, spz, sp, fmx, fmy, fmz,
+                            nbonds,
+                            radius, diameter, omegax, omegay, omegaz,
+                            temperature, heatflow,
+                            angmomx, angmomy, angmomz,
+                            shapex, shapey, shapez,
+                            block1, block2,
+                            inertiax, inertiay, inertiaz,
+                            quatw, quati, quatj, quatk, tqx, tqy, tqz,
+                            end1x, end1y, end1z, end2x, end2y, end2z,
+                            corner1x, corner1y, corner1z,
+                            corner2x, corner2y, corner2z,
+                            corner3x, corner3y, corner3z,
+                            i_name, d_name, i2_name[I], d2_name[I],
+                            vfrac, s0, espin, eradius, ervel, erforce,
+                            rho, drho, e, de, cv, buckling,
+                            apip_lambda, apip_lambda_input, apip_e_fast,
+                            apip_e_precise, apip_la_inp, apip_la_avg,
+                            apip_la_norm
+  :::
+  ::::
+
+  ``` literal-block
+  id = atom ID
+  mol = molecule ID
+  proc = ID of processor that owns atom
+  type = atom type
+  mass = atom mass
+  x,y,z = unscaled atom coordinates
+  xs,ys,zs = scaled atom coordinates
+  xu,yu,zu = unwrapped atom coordinates
+  ix,iy,iz = box image that the atom is in
+  vx,vy,vz = atom velocities
+  fx,fy,fz = forces on atoms
+  q = atom charge
+  mux,muy,muz = orientation of dipole moment of atom
+  mu = magnitude of dipole moment of atom
+  spx, spy, spz = direction of the atomic magnetic spin
+  sp = magintude of atomic magnetic spin moment
+  fmx, fmy, fmz = magnetic force
+  nbonds = number of bonds assigned to an atom
+  radius,diameter = radius,diameter of spherical particle
+  omegax,omegay,omegaz = angular velocity of spherical particle
+  temperature = internal temperature of spherical particle
+  heatflow = internal heat flow of spherical particle
+  angmomx,angmomy,angmomz = angular momentum of aspherical particle
+  shapex,shapey,shapez = 3 diameters of aspherical particle
+  block1,block2 = 2 blockiness exponents of aspherical (superellipsoid) particle
+  inertiax,inertiay,inertiaz = 3 principal moments of inertia of aspherical (superellipsoid) particle
+  quatw,quati,quatj,quatk = quaternion components for aspherical or body particles
+  tqx,tqy,tqz = torque on finite-size particles
+  end12x, end12y, end12z = end points of line segment
+  corner123x, corner123y, corner123z = corner points of triangle
+  i_name = custom integer vector with name
+  d_name = custom floating point vector with name
+  i2_name[I] = Ith column of custom integer array with name
+  d2_name[I] = Ith column of custom floating-point array with name
+  ```
+
+  ``` literal-block
+  APIP package per-atom properties:
+  apip_lambda = switching parameter
+  apip_lambda_input = input used to calculate the switching parameter
+  apip_e_fast,apip_e_precise = potential energies mixed by the adaptive-precision potential
+  apip_la_inp = input used for the local averaging of the descriptor
+  apip_la_norm = locally averaged radial weighting function used for normalization
+  apip_la_avg = locally averaged descriptor used to calculate the switching parameter
+  ```
+
+  :::: {.highlight-none .notranslate}
+  ::: highlight
+      PERI package per-atom properties:
+      vfrac = volume fraction
+      s0 = max stretch of any bond a particle is part of
+  :::
+  ::::
+
+  :::: {.highlight-none .notranslate}
+  ::: highlight
+      EFF package per-atom properties:
+      espin = electron spin
+      eradius = electron radius
+      ervel = electron radial velocity
+      erforce = electron radial force
+  :::
+  ::::
+
+  :::: {.highlight-none .notranslate}
+  ::: highlight
+      SPH package per-atom properties:
+      rho = density of SPH particles
+      drho = change in density
+      e = energy
+      de = change in thermal energy
+      cv = heat capacity
+  :::
+  ::::
+:::::
+
+::::: {#examples .section}
+## Examples[](#examples "Link to this heading"){.headerlink}
+
+:::: {.highlight-LAMMPS .notranslate}
+::: highlight
+    compute 1 all property/atom xs vx fx mux
+    compute 2 all property/atom type
+    compute 1 all property/atom ix iy iz
+    compute 3 all property/atom sp spx spy spz
+    compute 1 all property/atom i_myFlag d_Sxyz[1] d_Sxyz[3]
+:::
+::::
+:::::
+
+:::::::: {#description .section}
+## Description[](#description "Link to this heading"){.headerlink}
+
+Define a computation that simply stores atom attributes for each atom in the group. This is useful so that the values can be used by other [[output commands]{.doc}]Howto_output.md){.reference .internal} that take computes as inputs. See for example, the [[compute reduce]{.doc}]compute_reduce.md){.reference .internal}, [[fix ave/atom]{.doc}]fix_ave_atom.md){.reference .internal}, [[fix ave/histo]{.doc}]fix_ave_histo.md){.reference .internal}, [[fix ave/chunk]{.doc}]fix_ave_chunk.md){.reference .internal}, and [[atom-style variable]{.doc}]variable.md){.reference .internal} commands.
+
+The list of possible attributes is essentially the same as that used by the [[dump custom]{.doc}]dump.md){.reference .internal} command, which describes their meaning, with some additional quantities that are only defined for certain [[atom styles]{.doc}]atom_style.md){.reference .internal}. The goal of this augmented list gives an input script access to any per-atom quantity stored by LAMMPS.
+
+The values are stored in a per-atom vector or array as discussed below. Zeroes are stored for atoms not in the specified group or for quantities that are not defined for a particular particle in the group (e.g., *shapex* if the particle is not an ellipsoid).
+
+Attributes *i_name*, *d_name*, *i2_name*, *d2_name* refer to custom per-atom integer and floating-point vectors or arrays that have been added via the [[fix property/atom]{.doc}]fix_property_atom.md){.reference .internal} command. When that command is used specific names are given to each attribute which are the "name" portion of these attributes. For arrays *i2_name* and *d2_name*, the column of the array must also be included following the name in brackets (e.g., d2_xyz\[2\] or i2_mySpin\[3\]).
+
+The additional quantities only accessible via this command, and not directly via the [[dump custom]{.doc}]dump.md){.reference .internal} command, are as follows.
+
+*Nbonds* is available for all molecular atom styles and refers to the number of explicit bonds assigned to an atom. Note that if the [[newton bond]{.doc}]newton.md){.reference .internal} command is set to *on*, which is the default, then every bond in the system is assigned to only one of the two atoms in the bond. Thus a bond between atoms [\\(I\\)]{.math .notranslate .nohighlight} and [\\(J\\)]{.math .notranslate .nohighlight} may be tallied for either atom [\\(I\\)]{.math .notranslate .nohighlight} or atom [\\(J\\)]{.math .notranslate .nohighlight}. If [[newton bond off]{.doc}]newton.md){.reference .internal} is set, it will be tallied with both atom [\\(I\\)]{.math .notranslate .nohighlight} and atom [\\(J\\)]{.math .notranslate .nohighlight}.
+
+The quantities *shapex*, *shapey*, and *shapez* are defined for ellipsoidal particles and define the 3d shape of each particle.
+
+::: versionadded
+[Added in version 30Mar2026.]{.versionmodified .added}
+:::
+
+The quantities *block1*, and *block2*, are defined for superellipsoidal particles and define the blockiness of each superellipsoid particle. See the [[set]{.doc}]set.md){.reference .internal} command for an explanation of the blockiness.
+
+::: versionadded
+[Added in version 30Mar2026.]{.versionmodified .added}
+:::
+
+The quantities *inertiax*, *inertiay*, and *inertiaz* are defined for superellipsoidal particles and define the 3 principal moments of inertia of each particle. These are with respect to the particle's center of mass and in a reference system aligned with the particle's principal axes.
+
+The quantities *quatw*, *quati*, *quatj*, and *quatk* are defined for ellipsoidal particles and body particles and store the 4-vector quaternion representing the orientation of each particle. See the [[set]{.doc}]set.md){.reference .internal} command for an explanation of the quaternion vector.
+
+*End1x*, *end1y*, *end1z*, *end2x*, *end2y*, *end2z*, are defined for line segment particles and define the end points of each line segment.
+
+*Corner1x*, *corner1y*, *corner1z*, *corner2x*, *corner2y*, *corner2z*, *corner3x*, *corner3y*, *corner3z*, are defined for triangular particles and define the corner points of each triangle.
+
+The accessible quantities from the [[APIP package]{.doc}]Howto_apip.md){.reference .internal} are explained in the doc pages of this package in detail. In short: *apip_lambda* is the switching parameter [\\(\\lambda\\in\[0,1\]\\)]{.math .notranslate .nohighlight}. The switching parameter can be calculated from *apip_lambda_input* and mixes the energies of a fast (*apip_e_fast*) and a precise (*apip_e_precise*) potential into an adaptive-precision energy.
+
+::: versionchanged
+[Changed in version 30Mar2026.]{.versionmodified .changed}
+:::
+
+Alternatively, the switching parameter can be calculated from a locally averaged descriptor (*apip_la_avg*) to obtain a conservative potential. The descriptor is calculated from an atomic property (*apip_la_inp*) and normalized with a locally averaged weighting function (*apip_la_norm*).
+
+::: {.admonition .note}
+Note
+
+The energy according to the fast and the precise potential are only computed for the subset of atoms, for which it is required, i.e., for an atom [\\(i\\)]{.math .notranslate .nohighlight} with [\\(\\lambda_i=1\\)]{.math .notranslate .nohighlight} one does not need [\\(E_i\^\\text{precise}\\)]{.math .notranslate .nohighlight} and with [\\(\\lambda_i=0\\)]{.math .notranslate .nohighlight} one does not need [\\(E_i\^\\text{fast}\\)]{.math .notranslate .nohighlight}.
+:::
+
+In addition, the various per-atom quantities listed above for specific packages are only accessible by this command.
+
+::: versionchanged
+[Changed in version 15Sep2022: ]{.versionmodified .changed}The *espin* property was previously called *spin*.
+:::
+::::::::
+
+::: {#output-info .section}
+## Output info[](#output-info "Link to this heading"){.headerlink}
+
+This compute calculates a per-atom vector or per-atom array depending on the number of input values. If a single input is specified, a per-atom vector is produced. If two or more inputs are specified, a per-atom array is produced where the number of columns = the number of inputs. The vector or array can be accessed by any command that uses per-atom values from a compute as input. See the [[Howto output]{.doc}]Howto_output.md){.reference .internal} page for an overview of LAMMPS output options.
+
+The vector or array values will be in whatever [[units]{.doc}]units.md){.reference .internal} the corresponding attribute is in (e.g., velocity units for *vx*, charge units for *q*).
+
+For the spin quantities, *sp* is in the units of the Bohr magneton; *spx*, *spy*, and *spz* are unitless quantities; and *fmx*, *fmy*, and *fmz* are given in rad/THz.
+:::
+
+::: {#restrictions .section}
+## Restrictions[](#restrictions "Link to this heading"){.headerlink}
+
+none
+:::
+
+::: {#related-commands .section}
+## Related commands[](#related-commands "Link to this heading"){.headerlink}
+
+[[dump custom]{.doc}]dump.md){.reference .internal}, [[compute reduce]{.doc}]compute_reduce.md){.reference .internal}, [[fix ave/atom]{.doc}]fix_ave_atom.md){.reference .internal}, [[fix ave/chunk]{.doc}]fix_ave_chunk.md){.reference .internal}, [[fix property/atom]{.doc}]fix_property_atom.md){.reference .internal}
+:::
+
+::: {#default .section}
+## Default[](#default "Link to this heading"){.headerlink}
+
+none
+:::
+:::::::::::::::::::
+::::::::::::::::::::
+:::::::::::::::::::::

@@ -1,0 +1,133 @@
+:::::: {.document role="main" itemscope="itemscope" itemtype="https://schema.org/Article"}
+::::: {itemprop="articleBody"}
+[\\(\\renewcommand{\\AA}{\\text{Å}}\\)]{.math .notranslate .nohighlight}
+
+:::: {#commands .section}
+# Commands[](#commands "Link to this heading"){.headerlink}
+
+::: {.toctree-wrapper .compound}
+- [angle_coeff command]angle_coeff.md){.reference .internal}
+- [angle_style command]angle_style.md){.reference .internal}
+- [angle_write command]angle_write.md){.reference .internal}
+- [atom_modify command]atom_modify.md){.reference .internal}
+- [atom_style command]atom_style.md){.reference .internal}
+- [balance command]balance.md){.reference .internal}
+- [bond_coeff command]bond_coeff.md){.reference .internal}
+- [bond_style command]bond_style.md){.reference .internal}
+- [bond_write command]bond_write.md){.reference .internal}
+- [boundary command]boundary.md){.reference .internal}
+- [change_box command]change_box.md){.reference .internal}
+- [clear command]clear.md){.reference .internal}
+- [comm_modify command]comm_modify.md){.reference .internal}
+- [comm_style command]comm_style.md){.reference .internal}
+- [compute command]compute.md){.reference .internal}
+- [compute_modify command]compute_modify.md){.reference .internal}
+- [create_atoms command]create_atoms.md){.reference .internal}
+- [create_bonds command]create_bonds.md){.reference .internal}
+- [create_box command]create_box.md){.reference .internal}
+- [delete_atoms command]delete_atoms.md){.reference .internal}
+- [delete_bonds command]delete_bonds.md){.reference .internal}
+- [dielectric command]dielectric.md){.reference .internal}
+- [dihedral_coeff command]dihedral_coeff.md){.reference .internal}
+- [dihedral_style command]dihedral_style.md){.reference .internal}
+- [dihedral_write command]dihedral_write.md){.reference .internal}
+- [dimension command]dimension.md){.reference .internal}
+- [displace_atoms command]displace_atoms.md){.reference .internal}
+- [dynamical_matrix command]dynamical_matrix.md){.reference .internal}
+- [echo command]echo.md){.reference .internal}
+- [fix command]fix.md){.reference .internal}
+- [fix_modify command]fix_modify.md){.reference .internal}
+- [fitpod command]fitpod_command.md){.reference .internal}
+- [geturl command]geturl.md){.reference .internal}
+- [group command]group.md){.reference .internal}
+- [group2ndx command]group2ndx.md){.reference .internal}
+- [ndx2group command]group2ndx.md#ndx2group-command){.reference .internal}
+- [hyper command]hyper.md){.reference .internal}
+- [if command]if.md){.reference .internal}
+- [improper_coeff command]improper_coeff.md){.reference .internal}
+- [improper_style command]improper_style.md){.reference .internal}
+- [include command]include.md){.reference .internal}
+- [info command]info.md){.reference .internal}
+- [jump command]jump.md){.reference .internal}
+- [kim command]kim_commands.md){.reference .internal}
+- [kspace_modify command]kspace_modify.md){.reference .internal}
+- [kspace_style command]kspace_style.md){.reference .internal}
+- [label command]label.md){.reference .internal}
+- [labelmap command]labelmap.md){.reference .internal}
+- [lattice command]lattice.md){.reference .internal}
+- [log command]log.md){.reference .internal}
+- [mass command]mass.md){.reference .internal}
+- [mdi command]mdi.md){.reference .internal}
+- [min_modify command]min_modify.md){.reference .internal}
+- [min_style spin command]min_spin.md){.reference .internal}
+- [min_style spin/cg command]min_spin.md#min-style-spin-cg-command){.reference .internal}
+- [min_style spin/lbfgs command]min_spin.md#min-style-spin-lbfgs-command){.reference .internal}
+- [min_style cg command]min_style.md){.reference .internal}
+- [min_style hftn command]min_style.md#min-style-hftn-command){.reference .internal}
+- [min_style sd command]min_style.md#min-style-sd-command){.reference .internal}
+- [min_style quickmin command]min_style.md#min-style-quickmin-command){.reference .internal}
+- [min_style fire command]min_style.md#min-style-fire-command){.reference .internal}
+- [[min_style spin]{.xref .std .std-doc} command]min_style.md#min-style-spin-command){.reference .internal}
+- [[min_style spin/cg]{.xref .std .std-doc} command]min_style.md#min-style-spin-cg-command){.reference .internal}
+- [[min_style spin/lbfgs]{.xref .std .std-doc} command]min_style.md#min-style-spin-lbfgs-command){.reference .internal}
+- [minimize command]minimize.md){.reference .internal}
+- [molecule command]molecule.md){.reference .internal}
+- [neb command]neb.md){.reference .internal}
+- [neb/spin command]neb_spin.md){.reference .internal}
+- [neigh_modify command]neigh_modify.md){.reference .internal}
+- [neighbor command]neighbor.md){.reference .internal}
+- [newton command]newton.md){.reference .internal}
+- [next command]next.md){.reference .internal}
+- [package command]package.md){.reference .internal}
+- [pair_coeff command]pair_coeff.md){.reference .internal}
+- [pair_modify command]pair_modify.md){.reference .internal}
+- [pair_style command]pair_style.md){.reference .internal}
+- [pair_write command]pair_write.md){.reference .internal}
+- [partition command]partition.md){.reference .internal}
+- [plugin command]plugin.md){.reference .internal}
+- [prd command]prd.md){.reference .internal}
+- [print command]print.md){.reference .internal}
+- [processors command]processors.md){.reference .internal}
+- [python command]python.md){.reference .internal}
+- [quit command]quit.md){.reference .internal}
+- [read_data command]read_data.md){.reference .internal}
+- [read_dump command]read_dump.md){.reference .internal}
+- [read_restart command]read_restart.md){.reference .internal}
+- [region command]region.md){.reference .internal}
+- [region2vmd command]region2vmd.md){.reference .internal}
+- [replicate command]replicate.md){.reference .internal}
+- [rerun command]rerun.md){.reference .internal}
+- [reset_atoms command]reset_atoms.md){.reference .internal}
+- [reset_timestep command]reset_timestep.md){.reference .internal}
+- [restart command]restart.md){.reference .internal}
+- [run command]run.md){.reference .internal}
+- [run_style command]run_style.md){.reference .internal}
+- [set command]set.md){.reference .internal}
+- [shell command]shell.md){.reference .internal}
+- [special_bonds command]special_bonds.md){.reference .internal}
+- [suffix command]suffix.md){.reference .internal}
+- [tad command]tad.md){.reference .internal}
+- [temper command]temper.md){.reference .internal}
+- [temper/grem command]temper_grem.md){.reference .internal}
+- [temper/npt command]temper_npt.md){.reference .internal}
+- [thermo command]thermo.md){.reference .internal}
+- [thermo_modify command]thermo_modify.md){.reference .internal}
+- [thermo_style command]thermo_style.md){.reference .internal}
+- [third_order command]third_order.md){.reference .internal}
+- [timer command]timer.md){.reference .internal}
+- [timestep command]timestep.md){.reference .internal}
+- [uncompute command]uncompute.md){.reference .internal}
+- [undump command]undump.md){.reference .internal}
+- [unfix command]unfix.md){.reference .internal}
+- [units command]units.md){.reference .internal}
+- [variable command]variable.md){.reference .internal}
+- [velocity command]velocity.md){.reference .internal}
+- [write_coeff command]write_coeff.md){.reference .internal}
+- [write_data command]write_data.md){.reference .internal}
+- [write_dump command]write_dump.md){.reference .internal}
+- [write_molecule command]write_molecule.md){.reference .internal}
+- [write_restart command]write_restart.md){.reference .internal}
+:::
+::::
+:::::
+::::::

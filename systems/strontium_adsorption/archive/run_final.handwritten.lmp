@@ -1,0 +1,411 @@
+# ============================================================
+# SrCl2 吸附模拟 - 70 Å 水层
+# ============================================================
+# 模拟目标:
+#   Sr²⁺ 和 Cl⁻ 在带电黏土表面附近的吸附行为
+#   比较贴近表面 vs 本体水中的 Sr²⁺ 浓度差异
+#
+# 体系:
+#   底部 2 层带电表面 (type 1, 固定不动)
+#   上方 ~70 Å SPC/E 水 (type 2=Ow, type 3=Hw)
+#   Sr²⁺ (type 4) + Cl⁻ (type 5), 浓度 0.25 mol/L
+#
+# 力场:
+#   短程: Lennard-Jones 12-6 + Coulomb (截断 9 Å / LJ 截断 8 Å)
+#   长程: PPPM 求解器 (精度 1e-4)
+#   水: SPC/E 刚性模型 (harmonic bond + harmonic angle)
+#   温度: 300 K, Nose-Hoover 恒温器
+# ============================================================
+
+# ============================================================
+# 第 1 部分: 全局设置
+# ============================================================
+
+units                   real
+# units real — 使用 real 单位制
+#   能量: kcal/mol
+#   长度: Angstrom (Å)
+#   质量: g/mol
+#   时间: fs (飞秒, 1 fs = 10⁻¹⁵ s)
+#   电荷: 电子电荷 e 的倍数
+#   温度: K (开尔文)
+#   压力: atm (大气压)
+# 选择 real 的原因: SPC/E 水模型和 CLAYFF 力场参数都以 kcal/mol 和 Å 为单位
+
+atom_style              full
+# atom_style full — 每个原子的数据格式
+#   full 格式包含: atom-ID, molecule-ID, atom-type, charge, x, y, z
+#   需要 molecule-ID: 水分子需要区分不同 H₂O 属于哪个分子 (用于 bond/angle)
+#   需要 charge: 库仑力计算需要每个原子的部分电荷
+#   对比: atomic 格式没有 molecule-ID 和 charge
+#   对比: charge 格式有 charge 但没有 molecule-ID
+
+boundary                p p p
+# boundary p p p — 三个方向都是周期性边界
+#   p = periodic (周期)
+#   顺序: x y z
+#   PPPM 长程静电求解器要求所有方向都是周期性
+#   盒子在 z 方向留有真空层来减弱周期镜像的干扰
+
+# ============================================================
+# 第 2 部分: 读入体系数据
+# ============================================================
+
+read_data               system.data
+# read_data — 从外部文件读取原子坐标、键、角等信息
+#   system.data 由 build_system.py 生成, 位于本脚本同目录
+#   包含内容:
+#     - 原子列表 (坐标、类型、电荷、分子ID)
+#     - 键列表 (O-H 键, SPC/E 水分子)
+#     - 角列表 (H-O-H 角, SPC/E 水分子)
+#     - 盒子尺寸 (xlo xhi, ylo yhi, zlo zhi)
+#     - 质量表 (每种原子类型的质量)
+#   相对路径按工作目录解析: docker exec -w /data/strontium_adsorption
+#   Windows 本地对应 C:\Users\23653\Desktop\cc-proj\lammps-test\strontium_adsorption
+
+# ============================================================
+# 第 3 部分: 分组
+# ============================================================
+
+group                   surf type 1
+# group surf type 1 — 创建名为 "surf" 的组，包含所有 type 1 原子
+#   type 1 = 表面原子 (Surf)
+#   后续会对这个组施加固定约束
+
+group                   water type 2 3
+# group water type 2 3 — 创建名为 "water" 的组
+#   type 2 = 水氧 (Ow)
+#   type 3 = 水氢 (Hw)
+#   包含所有水分子原子
+
+group                   sr type 4
+# group sr type 4 — 创建名为 "sr" 的组
+#   type 4 = 锶离子 Sr²⁺
+
+group                   cl type 5
+# group cl type 5 — 创建名为 "cl" 的组
+#   type 5 = 氯离子 Cl⁻
+
+group                   mobile union water sr cl
+# group mobile union water sr cl — 合并多个组
+#   mobile = water + sr + cl
+#   即所有可以移动的原子 (表面原子除外)
+#   后续的温度初始化、恒温器只作用于 mobile 组
+
+fix                     f_fix surf setforce 0 0 0
+# fix f_fix surf setforce 0 0 0 — 冻结表面原子
+#   fix 名称: f_fix
+#   作用组: surf (表面原子)
+#   setforce 0 0 0: 每个时间步将力强制设为零
+#     这意味着表面原子不受任何力的影响
+#     位置永远不变, 相当于无限质量的刚体
+#   为什么冻结: 黏土表面在物理上远重于水和离子
+#     原子级模拟中冻结底面是标准做法, 避免表面漂移
+
+# ============================================================
+# 第 4 部分: 力场参数 (非键相互作用)
+# ============================================================
+
+pair_style              lj/cut/coul/long 9.0 8.0
+# pair_style lj/cut/coul/long — 对势类型
+#   lj/cut: Lennard-Jones 12-6 势, 在截断距离处直接截断
+#   coul/long: 库仑势, 短程部分直接求和, 长程部分用 PPPM
+#   9.0: 库仑短程截断半径 = 9 Å
+#        超过 9 Å 的静电作用由 PPPM 在倒空间处理
+#   8.0: LJ 截断半径 = 8 Å
+#         超过 8 Å 的 LJ 作用忽略
+
+kspace_style            pppm 1e-4
+# kspace_style pppm 1e-4 — 长程静电求解器
+#   pppm: Particle-Particle Particle-Mesh 方法
+#         把电荷映射到网格上, 用 FFT 求解泊松方程
+#         比 Ewald 求和快得多 (O(N log N) vs O(N²))
+#   1e-4: 力计算的相对精度
+#         值越小越精确但越慢
+#         1e-4 是标准精度, 对水溶液模拟足够
+
+pair_modify             mix arithmetic
+# pair_modify mix arithmetic — 不同原子类型间的 LJ 混合规则
+#   arithmetic: 算术平均
+#     σ_ij = (σ_i + σ_j) / 2
+#     ε_ij = sqrt(ε_i × ε_j)
+#   只有没显式写 pair_coeff I J 的交叉项才用混合规则
+#   这里每种交叉项都通过混合规则自动生成
+
+# --- 同种原子对的 LJ 参数 ---
+# pair_coeff 格式: pair_coeff I J ε σ
+#   I, J — 原子类型
+#   ε — LJ 势阱深度 (kcal/mol)
+#   σ — 碰撞直径 (Å), 即势能为零时的距离
+#   只写 I I 的同种对, 交叉对 (I ≠ J) 由混合规则自动生成
+
+pair_coeff              1 1 0.1554 3.1655
+# pair_coeff 1 1 — 表面-表面 LJ 参数
+#   ε = 0.1554 kcal/mol, σ = 3.1655 Å
+#   近似 CLAYFF 力场中蒙脱石氧原子的参数
+
+pair_coeff              2 2 0.1553 3.1660
+# pair_coeff 2 2 — 水氧-水氧 LJ 参数
+#   ε = 0.1553 kcal/mol, σ = 3.1660 Å
+#   标准 SPC/E 水模型的氧原子 LJ 参数
+#   SPC/E 水的 σ 和 ε 经过优化以重现水的密度和蒸发焓
+
+pair_coeff              3 3 0.0 1.0
+# pair_coeff 3 3 — 水氢-水氢 LJ 参数
+#   ε = 0.0 kcal/mol, σ = 1.0 Å
+#   标准 SPC/E 做法: 氢原子没有 LJ 相互作用
+#   ε = 0 意味着氢不参与任何短程色散/排斥
+#   σ = 1.0 是占位值 (ε=0 时 σ 不影响结果, 但必须有值)
+#   氢的相互作用完全来自库仑力 (电荷 +0.41)
+
+pair_coeff              4 4 0.1 3.0
+# pair_coeff 4 4 — Sr²⁺-Sr²⁺ LJ 参数
+#   ε = 0.1 kcal/mol, σ = 3.0 Å
+#   注意: 当前值来源为随手设定, 无文献依据 (可信度低)
+#   注意: work-log 指出 σ=3.0 可能偏小, 深吸附阱或为力场假象
+#   文献建议: Aqvist 1990 (SPC 水) / Mamatkulov 2013 / Li-Song-Merz 2015
+#   (12-6-4), 数值随水模型而异; 建议按 SPC/E 核对后替换
+#   Sr²⁺ 的 LJ 作用较弱 (ε 小), 主要靠 +2 电荷的库仑力
+
+pair_coeff              5 5 0.1 4.0
+# pair_coeff 5 5 — Cl⁻-Cl⁻ LJ 参数
+#   ε = 0.1 kcal/mol, σ = 4.0 Å
+#   注意: 当前值来源为随手设定, 无文献依据 (可信度低)
+#   文献建议 (推荐替换): Joung & Cheatham, J. Phys. Chem. B 2008, 112, 9020
+#     针对 SPC/E 水优化: ε = 0.1000 kcal/mol, σ = 4.045 Å
+#   Cl⁻ 比 Sr²⁺ 大 (σ 更大), 反映离子半径差异
+
+# --- 注意: 交叉项由混合规则自动处理 ---
+# 例如表面-Sr²⁺:
+#   σ_14 = (3.1655 + 3.0) / 2 = 3.08275
+#   ε_14 = sqrt(0.1554 × 0.1) = 0.1247
+# 表面对 Sr²⁺ 的 LJ 吸引会促进吸附
+
+# ============================================================
+# 第 5 部分: 力场参数 (分子内相互作用 — SPC/E 水)
+# ============================================================
+
+bond_style              harmonic
+# bond_style harmonic — 简谐键势
+#   势能形式: E = K_b (r - r₀)²
+#   K_b: 力常数 (刚度)
+#   r₀: 平衡键长
+#   简谐势是最简单的键势, 适合刚性水分子
+
+bond_coeff              1 554.1349 1.0
+# bond_coeff 1 — bond type 1 的参数
+#   K_b = 554.1349 kcal/(mol·Å²)
+#   r₀ = 1.0 Å
+#   这是 SPC/E 水的 O-H 键标准参数
+#   K_b 很大 (554), 意味着键非常刚硬
+#   配合小时间步 (0.2 fs) 使用, 水分子几何几乎不变
+
+angle_style             harmonic
+# angle_style harmonic — 简谐角势
+#   势能形式: E = K_a (θ - θ₀)²
+#   K_a: 力常数 (刚度)
+#   θ₀: 平衡键角 (度)
+
+angle_coeff             1 45.7696 109.47
+# angle_coeff 1 — angle type 1 的参数
+#   K_a = 45.7696 kcal/(mol·rad²)
+#   θ₀ = 109.47°
+#   这是 SPC/E 水的 H-O-H 角标准参数
+#   109.47° 是四面体角 (理想 sp³ 杂化)
+#   同样很刚硬, 保持水分子几何
+
+special_bonds           lj 0.0 0.0 0.5 coul 0.0 0.0 0.5
+# special_bonds — 1-2, 1-3, 1-4 近邻原子的特殊处理
+#   格式: special_bonds lj w12 w13 w14 coul w12 w13 w14
+#   权重含义:
+#     w12 = 1-2 近邻 (直接成键, 如 O-H) 的权重
+#     w13 = 1-3 近邻 (隔一个原子, 如 H-H 在同一水分子) 的权重
+#     w14 = 1-4 近邻 (隔两个原子) 的权重
+#   lj 0.0 0.0 0.5:
+#     1-2: 不计算 LJ (O-H 之间由键势处理)
+#     1-3: 不计算 LJ (H-H 之间由角势处理)
+#     1-4: 乘以 0.5 (弱化但不完全排除)
+#   coul 0.0 0.0 0.5:
+#     1-2: 不计算库仑 (O-H 电荷已在键势中考虑)
+#     1-3: 不计算库仑 (同一水分子内 H-H)
+#     1-4: 乘以 0.5
+#   这是 SPC/E 水模型的标准设置
+#   确保水分子内部的非键作用被正确排除
+
+# ============================================================
+# 第 6 部分: 模拟控制参数
+# ============================================================
+
+neighbor                2.0 bin
+# neighbor 2.0 bin — 近邻列表参数
+#   2.0: 近邻列表的额外缓冲距离 (Å)
+#         实际近邻截断 = 最大截断半径 (这里是 9.0) + 2.0 = 11.0 Å
+#         缓冲距离越大, 重建近邻列表的频率越低
+#         (原子需要移动超过 2.0 Å 才重建)
+#   bin: 用 binning 算法构建近邻列表
+#        把盒子分成小格子, 只检查相邻格子内的原子
+#        比 O(N²) 所有对检查快得多
+
+# package omp 8 — 注意: 此命令必须在盒子定义前使用; 这里由命令行 -pk omp 8 统一设置
+#   (2026-08-28 移除脚本内的 package 命令: 它位于 read_data 之后, 触发
+#    LAMMPS 报错 "Package command after simulation box is defined")
+#   基准 (5137 原子, 见 docs/work-log.md): 1 MPI + OMP 8t = 198 steps/s (最快)
+#   线程数按机器核数调整; 命令行示例:
+#     docker exec -w /data/strontium_adsorption lammpsd /usr/bin/lmp_mpi -sf omp -pk omp 8 -in run_final.lmp
+
+thermo_modify           lost ignore flush yes
+# thermo_modify — 修改热力学输出的行为
+#   lost ignore: 如果检测到原子丢失 (跑出盒子), 不报错而是忽略
+#                适合: 知道可能偶尔有原子漂出但不想停模拟
+#                注意: 这只影响警告, 真正 lost atoms 仍会 crash
+#   flush yes: 每次输出热力学数据后立即刷新缓冲区
+#              确保日志实时可见 (不缓存)
+#              对监控长模拟很有用: 可以 tail -f 看进度
+
+thermo                  2000
+# thermo 2000 — 热力学输出频率
+#   每 2000 步输出一行热力学数据到屏幕和日志
+#   2000 × 2.0 fs = 4000 fs = 4 ps 输出一次
+#   之前用 500 × 0.2 fs = 0.1 ps 太频繁, 日志会爆炸
+
+# ============================================================
+# 第 7 部分: 能量最小化
+# ============================================================
+
+print "=== MINIMIZATION ==="
+# print — 输出一行文本到屏幕/日志
+#   用于标记模拟阶段, 方便在日志中定位
+#   必须用 ASCII 字符 (中文在 LAMMPS 中可能乱码)
+
+min_style               cg
+# min_style cg — 最小化算法
+#   cg = Conjugate Gradient (共轭梯度法)
+#   优点: 收敛快, 适合大体系
+#   对比: sd (最速下降) 更稳定但慢; hftn (Hessian-free) 更精确但贵
+#   cg 是标准选择
+
+minimize                1e-4 1e-6 500 10000
+# minimize etol ftol maxiter maxeval — 能量最小化
+#   etol = 1e-4: 能量收敛判据
+#         当两次迭代间能量变化 / 当前能量 < 1e-4 时停止
+#         单位: 无量纲 (相对变化)
+#   ftol = 1e-6: 力收敛判据
+#         当所有原子上的最大力分量 < 1e-6 kcal/(mol·Å) 时停止
+#         这是非常严格的收敛标准
+#         满足 etol 或 ftol 任何一条就停
+#   maxiter = 500: 最大迭代次数
+#   maxeval = 10000: 最大力计算次数
+#         每次迭代可能需要多次力计算 (线搜索)
+#         任一上限达到就强制停止
+#   目的: 消除初始结构中的原子重叠和过大应力
+#   最小化后的结构是 NVT 平衡的起点
+
+print "=== MINIMIZATION DONE ==="
+
+# ============================================================
+# 第 7b 部分: SHAKE 约束 (水分子刚性固定)
+# ============================================================
+# SHAKE 必须在 minimize 之后、NVT 之前定义
+#   minimize 不支持 fix shake 同时激活
+#   SHAKE 替代 harmonic 键/角势: 固定 O-H 键长 1.0 Å 和 H-O-H 角 109.47°
+#   消除 O-H 高频振动, 允许步长从 0.2 fs 提升到 2.0 fs
+
+fix                     fshake water shake 0.0001 20 100 b 1 a 1
+# fix fshake water shake — SHAKE 算法
+#   作用组: water (只约束水分子, 表面/离子不受影响)
+#   参数:
+#     0.0001 = 相对容差 (约束收敛判据)
+#     20     = 每步最大迭代次数
+#     100    = 每 100 步输出一次 SHAKE 统计信息
+#   b 1: 约束所有 bond type 1 (O-H)
+#   a 1: 约束所有 angle type 1 (H-O-H)
+#   注意: bond_style/angle_style 仍需定义, SHAKE 从 bond_coeff/angle_coeff
+#         读取平衡值, 但 SHAKE 替代 harmonic 势计算约束力
+
+# ============================================================
+# 第 8 部分: NVT 平衡
+# ============================================================
+
+print "=== NVT ==="
+
+velocity                mobile create 300.0 12345
+# velocity mobile create 300.0 12345 — 初始化速度
+#   作用组: mobile (水 + Sr²⁺ + Cl⁻, 不含固定的表面)
+#   create: 生成新速度 (即使已有速度也覆盖)
+#   300.0: 目标温度 = 300 K
+#          速度按 Maxwell-Boltzmann 分布在 300 K 随机生成
+#   12345: 随机数种子
+#          固定种子保证每次运行相同初始条件 (可复现)
+#   注意: 表面原子没有速度 (fix setforce 只是冻结力, 不是速度)
+#         最好确保表面原子初始速度为零
+
+fix                     fnvt mobile nvt temp 300.0 300.0 100.0
+# fix fnvt mobile nvt — Nose-Hoover 恒温器 (NVT 系综)
+#   fix 名称: fnvt
+#   作用组: mobile (只控移动原子的温度)
+#   nvt: 恒定粒子数 N、体积 V、温度 T
+#   temp 300.0 300.0 100.0:
+#     起始温度 = 300 K
+#     目标温度 = 300 K
+#     温度阻尼参数 = 100 fs
+#       阻尼越小, 温度控制越强 (耦合越紧)
+#       100 fs 是适中的选择, 约 500 个时间步 (0.2 fs × 500)
+#   Nose-Hoover 产生正确的 NVT 分布
+#   对比: Langevin 恒温器会产生随机力 (耗散)
+#   对比: Berendsen 恒温器快速但不产生精确 NVT
+
+timestep                2.0
+# timestep 2.0 — 积分时间步长 = 2.0 fs
+#   real 单位制下单位是 fs
+#   2.0 fs 是水溶液 MD 的标准步长 (加了 SHAKE 后)
+#   没加 SHAKE 时只能用 0.2 fs (O-H 键高频振动)
+#   SHAKE 把键长角固定, 消除了高频振动, 步长可提 10 倍
+#   之前: 10000 步 × 0.2 fs = 2 ps
+#   现在: 50000 步 × 2.0 fs = 100 ps  (同样的步数, 10 倍物理时间)
+
+run                     100000
+# run 100000 — 运行 100000 步
+#   模拟时长: 100000 × 2.0 fs = 200000 fs = 200 ps
+#   目的: 让体系从最小化结构充分弛豫到 300 K 平衡状态
+#   200 ps 对水溶液平衡足够 (水 ~10 ps 弛豫)
+#   之前: 无 SHAKE 时跑 5000 × 0.2 fs = 1 ps (严重不足)
+
+print "=== NVT DONE ==="
+
+# ============================================================
+# 第 9 部分: 生产模拟 (产出轨迹)
+# ============================================================
+
+print "=== PRODUCTION ==="
+
+dump                    dmp1 all custom 100 prod.lammpstrj id type x y z
+# dump dmp1 all custom ... — 轨迹输出
+#   dmp1: dump 名称 (可多个 dump 同时存在)
+#   all: 输出所有原子
+#   custom: 自定义输出格式 (自选字段)
+#   100: 每 100 步输出一帧
+#        时间间隔: 100 × 2.0 fs = 200 fs = 0.2 ps
+#   输出文件: prod.lammpstrj (与脚本同目录, 相对工作目录解析)
+#   输出字段: id, type, x, y, z
+#     id: 原子编号 (用于追踪原子)
+#     type: 原子类型 (1=Surf, 2=Ow, 3=Hw, 4=Sr, 5=Cl)
+#     x y z: 原子坐标
+#   轨迹格式: LAMMPS trajectory (.lammpstrj)
+#   可直接用 VMD 打开
+
+thermo                  5000
+# thermo 5000 — 修改热力学输出频率
+#   5000 × 2.0 fs = 10000 fs = 10 ps 输出一次
+
+run                     50000
+# run 50000 — 运行 50000 步
+#   模拟时长: 50000 × 2.0 fs = 100000 fs = 100 ps
+#   轨迹帧数: 50000 / 100 = 500 帧
+#   100 ps 的 Sr²⁺ 扩散: RMS 位移 ≈ sqrt(2 × 1 Å²/ps × 100 ps) ≈ 14 Å
+#   足以从表面扩散到本体或反之 (距离 ~10-30 Å)
+#   如果要做真实吸附等温线, 建议至少 1 ns (500000 步)
+#   但 100 ps 已经可以判断趋势 — 够做"步长1"
+
+print "=== PRODUCTION DONE ==="
+# 模拟正常结束的标志
+# 如果日志最后出现了这一行, 说明没有 crash

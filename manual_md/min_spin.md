@@ -1,0 +1,110 @@
+::::::::::::::::::::: {.document role="main" itemscope="itemscope" itemtype="https://schema.org/Article"}
+:::::::::::::::::::: {itemprop="articleBody"}
+[\\(\\renewcommand{\\AA}{\\text{Å}}\\)]{.math .notranslate .nohighlight}
+
+::: {#min-style-spin-command .section}
+[]{#index-0}
+
+# min_style spin command[](#min-style-spin-command "Link to this heading"){.headerlink}
+:::
+
+::: {#min-style-spin-cg-command .section}
+# min_style spin/cg command[](#min-style-spin-cg-command "Link to this heading"){.headerlink}
+:::
+
+::::::::::::::::: {#min-style-spin-lbfgs-command .section}
+# min_style spin/lbfgs command[](#min-style-spin-lbfgs-command "Link to this heading"){.headerlink}
+
+::::: {#syntax .section}
+## Syntax[](#syntax "Link to this heading"){.headerlink}
+
+:::: {.highlight-LAMMPS .notranslate}
+::: highlight
+    min_style spin
+    min_style spin/cg
+    min_style spin/lbfgs
+:::
+::::
+:::::
+
+::::: {#examples .section}
+## Examples[](#examples "Link to this heading"){.headerlink}
+
+:::: {.highlight-LAMMPS .notranslate}
+::: highlight
+    min_style  spin/lbfgs
+    min_modify line spin_cubic discrete_factor 10.0
+:::
+::::
+:::::
+
+::::::: {#description .section}
+## Description[](#description "Link to this heading"){.headerlink}
+
+Apply a minimization algorithm to use when a [[minimize]{.doc}]minimize.md){.reference .internal} command is performed.
+
+Style *spin* defines a damped spin dynamics with an adaptive timestep, according to:
+
+::: {.math .notranslate .nohighlight}
+\\\[\\frac{d \\vec{s}\_{i}}{dt} = \\lambda\\, \\vec{s}\_{i} \\times\\left( \\vec{\\omega}\_{i} \\times\\vec{s}\_{i} \\right)\\\]
+:::
+
+with [\\(\\lambda\\)]{.math .notranslate .nohighlight} a damping coefficient (similar to a magnetic damping). [\\(\\lambda\\)]{.math .notranslate .nohighlight} can be defined by setting the *alpha_damp* keyword with the [[min_modify]{.doc}]min_modify.md){.reference .internal} command.
+
+The minimization procedure solves this equation using an adaptive timestep. The value of this timestep is defined by the largest precession frequency that has to be solved in the system:
+
+::: {.math .notranslate .nohighlight}
+\\\[{\\Delta t}\_\\mathrm{max} = \\frac{2\\pi}{\\kappa \\left\|\\vec{\\omega}\_\\mathrm{max} \\right\|}\\\]
+:::
+
+with [\\(\\left\|\\vec{\\omega}\_\\mathrm{max}\\right\|\\)]{.math .notranslate .nohighlight} the norm of the largest precession frequency in the system (across all processes, and across all replicas if a spin/neb calculation is performed).
+
+[\\(\\kappa\\)]{.math .notranslate .nohighlight} defines a discretization factor *discrete_factor* for the definition of this timestep. *discrete_factor* can be defined with the [[min_modify]{.doc}]min_modify.md){.reference .internal} command.
+
+Style *spin/cg* defines an orthogonal spin optimization (OSO) combined to a conjugate gradient (CG) algorithm. The [[min_modify]{.doc}]min_modify.md){.reference .internal} command can be used to couple the *spin/cg* to a line search procedure, and to modify the discretization factor *discrete_factor*. By default, style *spin/cg* does not employ the line search procedure and uses the adaptive time-step technique in the same way as style *spin*.
+
+Style *spin/lbfgs* defines an orthogonal spin optimization (OSO) combined to a limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) algorithm. By default, style *spin/lbfgs* does not employ line search procedure. If the line search procedure is not used then the discrete factor defines the maximum root mean squared rotation angle of spins by equation *pi/(5\*Kappa)*. The default value for Kappa is 10. The *spin_cubic* line search option can improve the convergence of the *spin/lbfgs* algorithm.
+
+The [[min_modify]{.doc}]min_modify.md){.reference .internal} command can be used to activate the line search procedure, and to modify the discretization factor *discrete_factor*.
+
+For more information about styles *spin/cg* and *spin/lbfgs*, see their implementation reported in [[(Ivanov)]{.std .std-ref}](#ivanov1){.reference .internal}.
+
+::: {.admonition .note}
+Note
+
+All the *spin* styles replace the force tolerance by a torque tolerance. See [[minimize]{.doc}]minimize.md){.reference .internal} for more explanation.
+:::
+
+::: {.admonition .note}
+Note
+
+The *spin/cg* and *spin/lbfgs* styles can be used for magnetic NEB calculations only if the line search procedure is deactivated. See [[neb/spin]{.doc}]neb_spin.md){.reference .internal} for more explanation.
+:::
+:::::::
+
+::: {#restrictions .section}
+## Restrictions[](#restrictions "Link to this heading"){.headerlink}
+
+The *spin*, *spin/cg*, and *spin/lbfgps* styles are part of the SPIN package. They are only enabled if LAMMPS was built with that package. See the [[Build package]{.doc}]Build_package.md){.reference .internal} page for more info.
+
+This minimization procedure is only applied to spin degrees of freedom for a frozen lattice configuration.
+:::
+
+::: {#related-commands .section}
+## Related commands[](#related-commands "Link to this heading"){.headerlink}
+
+[[min_style]{.doc}]min_style.md){.reference .internal}, [[minimize]{.doc}]minimize.md){.reference .internal}, [[min_modify]{.doc}]min_modify.md){.reference .internal}
+:::
+
+::: {#default .section}
+## Default[](#default "Link to this heading"){.headerlink}
+
+The option defaults are *alpha_damp* = 1.0, *discrete_factor* = 10.0, *line* = spin_none and *norm* = euclidean.
+
+------------------------------------------------------------------------
+
+**(Ivanov)** Ivanov, Uzdin, Jonsson. arXiv preprint arXiv:1904.02669, (2019).
+:::
+:::::::::::::::::
+::::::::::::::::::::
+:::::::::::::::::::::

@@ -1,0 +1,55 @@
+# 完整体系构建 + SrCl2 吸附模拟
+# 全部在 LAMMPS 内完成，不依赖外部生成器
+
+units                   real
+atom_style              full
+boundary                p p f
+
+# ====== 1. 建表面 (FCC) ======
+lattice                 fcc 3.0
+region                  box block 0 6 0 6 0 3
+create_box              5 box
+
+# 3 层表面原子
+region                  slab block 0 6 0 6 0 3
+create_atoms            1 region slab
+
+# 删除顶部多余原子（只保留底部 2 层）
+group                   top_remove type 1
+region                  keep_region block 0 6 0 6 0 2
+group                   top_remove region keep_region complement
+delete_atoms            group top_remove
+
+# ====== 2. 加水分子 (SPC/E) ======
+# 方法: 用 waters 结构文件，先放 O 再补 H
+# 采用简单方法: 在表面上方的网格中放置水 O
+lattice                 sc 3.2
+region                  water_reg block 0 6 0 6 2.5 10
+create_atoms            2 region water_reg
+
+# 检查有多少表面和 O 原子
+compute                n_surf all property/atom type
+compute                n_all all reduce sum c_n_surf
+thermo                 1
+run                    0
+
+# 删除太靠近表面的水 (z < 3.0)
+group                   water_ow type 2
+group                   near_surf water_ow type 2
+region                  surf_region block INF INF INF INF INF 3.0
+group                   near_surf region surf_region
+delete_atoms            group near_surf
+
+# ====== 3. 加 Sr²⁺ 和 Cl⁻ ======
+# 随机替换一些水为离子 (为演示: 替换位置)
+# 先标记所有 O 位置
+group                   water_oxy type 2
+set                     group water_oxy type 2
+
+print "体系构建完成"
+print "下一步: 写入数据文件后手动添加 H 原子"
+
+# 写入当前结构
+write_data              /data/strontium_adsorption/with_surface.data
+
+print "=== 表面和氧原子已写入 ==="

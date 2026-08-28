@@ -1,0 +1,31 @@
+# Python 虚拟环境
+.venv/
+__pycache__/
+*.pyc
+
+# LAMMPS 运行产物（体积大或可再生成）
+log.lammps
+*.lammpstrj
+*.dump
+*.restart
+
+# 可再生成的数据产物（由脚本生成, 不入版本控制）
+system.data
+msd.dat
+*.xlsx
+*.png
+sr_z_histogram.txt
+sr_z_distribution.txt
+cl_z_histogram.txt
+cl_z_distribution.txt
+lammps-data-docker/
+
+# 工作台运行时 (任务库/日志/前端构建产物/依赖)
+workbench/data/
+workbench/frontend/node_modules/
+workbench/frontend/dist/
+
+# AI 会话本地文件 / Python 构建产物
+.claude/
+.zcode/
+*.egg-info/

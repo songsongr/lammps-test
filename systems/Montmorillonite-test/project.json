@@ -1,0 +1,12 @@
+{
+  "id": "montmorillonite",
+  "name": "蒙脱石层间动力学",
+  "description": "CLAYFF 力场, 层间水/Ca²⁺ MSD 扩散 + RDF 水合结构 (clay_cif 构建器 + 手写两段弛豫脚本)",
+  "builtin": true,
+  "profile": "clay_cif",
+  "method_id": null,
+  "method_params": {},
+  "run_script": "01_run.lmp",
+  "rendered_sha": null,
+  "note": "01_run.lmp 为手写两段弛豫脚本, 力场数值已与 system.json 核对一致"
+}

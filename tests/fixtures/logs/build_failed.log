@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\23653\Desktop\cc-proj\lammps-test\common\build.py", line 39, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "C:\Users\23653\Desktop\cc-proj\lammps-test\common\build.py", line 20, in main
+    report = base.run_build(project_dir)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\23653\Desktop\cc-proj\lammps-test\common\builders\base.py", line 126, in run_build
+    out = build_fn(cfg, rng, project_dir=project_dir)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: build() got an unexpected keyword argument 'project_dir'
+[workbench] 任务失败 (exit code 1)

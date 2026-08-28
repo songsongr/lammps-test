@@ -1,0 +1,11 @@
+{
+  "id": "demos",
+  "name": "教学 / 环境验证",
+  "description": "最小 NVE 验证 (test.lmp) 与 Ar 吸附 Cu(100) 教学 demo (自包含脚本, 无体系数据层)",
+  "builtin": true,
+  "profile": null,
+  "method_id": null,
+  "method_params": {},
+  "run_script": null,
+  "rendered_sha": null
+}

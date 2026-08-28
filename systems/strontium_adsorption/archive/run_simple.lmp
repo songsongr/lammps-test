@@ -1,0 +1,64 @@
+# SrCl2 吸附模拟 - 纯 LJ (最终可跑版本)
+
+units           metal
+atom_style      atomic
+boundary        p p p
+
+# === 1. 建盒子 (SC, 间距 5) ===
+lattice         sc 5.0
+region          box block 0 4 0 4 0 8
+create_box      3 box
+
+# === 2. 表面 (底部 2 层) ===
+region          surf block 0 4 0 4 0 2
+create_atoms    1 region surf
+group           surf_grp type 1
+fix             f_fixed surf_grp setforce 0 0 0
+mass            1 63.546
+
+# === 3. 溶液 (上方, 全部 type 2) ===
+region          sol block 0 4 0 4 3 7
+create_atoms    2 region sol
+mass            2 18.0
+
+# === 4. 部分改 Sr (type 3) ===
+region          sr_zone block 0 4 0 4 3 4
+set             region sr_zone type 3
+mass            3 87.62
+
+# === 5. LJ 势 ===
+pair_style      lj/cut 8.0
+pair_coeff      * * 0.05 4.0
+pair_coeff      1 1 0.4 3.0         # 表面
+pair_coeff      2 2 0.03 4.0        # 溶剂
+pair_coeff      3 3 0.1 3.5         # Sr
+pair_coeff      1 2 0.1 3.5         # 表面-溶剂
+pair_coeff      1 3 0.3 3.2         # 表面-Sr (强吸引 → 吸附)
+pair_coeff      2 3 0.05 3.7        # 溶剂-Sr
+
+# === 6. 模拟 ===
+neighbor        2.0 bin
+thermo          100
+thermo_style    custom step temp pe ke etotal
+
+min_style       cg
+minimize        1e-6 1e-8 1000 10000
+print "=== 最小化完成 ==="
+
+# 缓和预平衡 (限制移动距离)
+velocity        all create 300.0 12345
+fix             f_nve all nve/limit 0.1
+fix             f_lang all langevin 300.0 300.0 0.5 12345
+timestep        0.0005
+thermo          200
+run             1000
+
+# 产出轨迹
+unfix           f_nve
+fix             f_nve2 all nve
+fix             f_lang2 all langevin 300.0 300.0 1.0 12345
+timestep        0.001
+dump            dmp1 all custom 20 /data/strontium_adsorption/traj.lammpstrj id type x y z
+run             3000
+
+print "=== 吸附模拟跑通! ==="

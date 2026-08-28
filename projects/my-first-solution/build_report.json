@@ -1,0 +1,22 @@
+{
+  "profile": "solution",
+  "n_atoms": 2091,
+  "type_counts": {
+    "1": 681,
+    "2": 1362,
+    "3": 16,
+    "4": 32
+  },
+  "n_bonds": 1362,
+  "n_angles": 681,
+  "total_charge": 0.0,
+  "box": [
+    0.0,
+    30.0,
+    0.0,
+    30.0,
+    0.0,
+    30.0
+  ],
+  "warnings": []
+}

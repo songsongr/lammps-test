@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "profile": "surface_adsorption",
+  "seed": 42,
+  "water_model": "SPCE",
+  "title": "Charged surface + SPC/E water + SrCl2",
+  "_comment": "体系参数单一真相源 (2026-08-28 真相归一)。如实记录历史混合体: 实际生产模拟使用 SPC 原始电荷 (-0.820/+0.410) + SPC/E 型 O-LJ (0.1553/3.1660), 见 atom_types 的 source/warning。如需严格 SPC/E, 将 Ow/Hw 电荷切换为 -0.8476/+0.4238 后重建并重跑。",
+  "geometry": {
+    "surface": {
+      "a": 3.0,
+      "nx": 10,
+      "ny": 10,
+      "layers": 2,
+      "occupancy": 0.5,
+      "charge_per_atom": -0.12,
+      "_note": "a=晶格常数(Å); occupancy=0.5 → (ix+iy+iz)%2==0 菱形占位; charge_per_atom=-0.12 模拟 MMT 层电荷 (100 原子 → -12)"
+    },
+    "water": {
+      "z_start": 6.0,
+      "thickness": 70.0,
+      "grid": 3.2,
+      "min_dist_surface": 3.2,
+      "_note": "z_start=水面起始高度; grid=水分子网格间距 (≈1 g/cm³); min_dist_surface=与表面最小距离"
+    },
+    "vacuum": 40.0
+  },
+  "ions": {
+    "conc_mol": 0.25,
+    "extra_sr": 6,
+    "_note": "conc_mol=SrCl2 浓度 (mol/L); extra_sr=额外 Sr²⁺ 平衡表面电荷 (每个 +2)"
+  },
+  "atom_types": [
+    {
+      "id": 1,
+      "name": "Surf",
+      "charge": -0.12,
+      "mass": 28.0855,
+      "eps": 0.1554,
+      "sigma": 3.1655,
+      "source": "近似 CLAYFF O 参数",
+      "confidence": "中"
+    },
+    {
+      "id": 2,
+      "name": "Ow",
+      "charge": -0.82,
+      "mass": 15.9994,
+      "eps": 0.1553,
+      "sigma": 3.166,
+      "source": "LJ: SPC/E (Berendsen 1987); 电荷: SPC 原始 (Berendsen 1981) — 历史混合体, 实际生产运行为此组合",
+      "confidence": "中",
+      "warning": "电荷非严格 SPC/E (-0.8476); 如需严格 SPC/E 请改电荷为预设值后重建并重跑"
+    },
+    {
+      "id": 3,
+      "name": "Hw",
+      "charge": 0.41,
+      "mass": 1.0079,
+      "eps": 0.0,
+      "sigma": 1.0,
+      "source": "LJ 无 (SPC/E 惯例); 电荷: SPC 原始 — 历史混合体",
+      "confidence": "中",
+      "warning": "电荷非严格 SPC/E (+0.4238); 与 Ow 同一并归事项"
+    },
+    {
+      "id": 4,
+      "name": "Sr",
+      "charge": 2.0,
+      "mass": 87.62,
+      "eps": 0.1,
+      "sigma": 3.0,
+      "source": "随手设定, 无文献",
+      "confidence": "低",
+      "ref": "候选文献: Aqvist 1990 / Mamatkulov 2013 / Li-Song-Merz 2015; work-log 指出 σ=3.0 可能偏小"
+    },
+    {
+      "id": 5,
+      "name": "Cl",
+      "charge": -1.0,
+      "mass": 35.453,
+      "eps": 0.1,
+      "sigma": 4.0,
+      "source": "随手设定, 无文献",
+      "confidence": "低",
+      "ref": "推荐替换 JC 2008 (SPC/E): eps=0.1000, sigma=4.045"
+    }
+  ]
+}

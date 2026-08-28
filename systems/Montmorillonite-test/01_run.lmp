@@ -1,0 +1,81 @@
+# 01_run.lmp — 蒙脱石模拟: 平衡→生产(MSD+RDF轨迹)
+# 力场数值 (pair_coeff/bond/angle) 的单一真相源为 system.json atom_types
+#   — 本脚本与之核对一致 (2026-08-28); 修改参数请改 system.json 后重建
+# 体系构建: uv run python -m common.build Montmorillonite-test
+
+units           real
+atom_style      full
+bond_style      harmonic
+angle_style     harmonic
+special_bonds   lj 0.0 0.0 0.5 coul 0.0 0.0 0.5
+pair_style      lj/cut/coul/long 9.0 8.0
+kspace_style    pppm 1.0e-4
+boundary        p p p
+
+read_data       system.data
+
+group           O_fw          type 1 2 3
+group           H_oh          type 4
+group           Si            type 5
+group           Al            type 6
+group           Ca            type 7
+group           Ow            type 8
+group           Hw            type 9
+group           framework     union O_fw H_oh Si Al
+group           water         union Ow Hw
+
+pair_coeff      1 1           0.15539   3.1655
+pair_coeff      2 2           0.15539   3.1655
+pair_coeff      3 3           0.15539   3.1655
+pair_coeff      4 4           0.0       0.0
+pair_coeff      5 5           1.84e-6   3.7064
+pair_coeff      6 6           5.56e-6   4.2713
+pair_coeff      7 7           0.23500   3.0950
+pair_coeff      8 8           0.15539   3.1655
+pair_coeff      9 9           0.0       0.0
+bond_coeff      1            554.13    1.0
+angle_coeff     1             45.77  109.47
+
+# ============================================================
+# 阶段1: NVE/limit + Langevin 弛豫
+# ============================================================
+print "=== STAGE1: RELAXATION ==="
+
+reset_timestep  0
+velocity        all create 300.0 12345
+timestep        0.5
+
+fix             f_nve all nve/limit 0.05
+fix             f_lang all langevin 300.0 300.0 10.0 12345
+
+thermo          5000
+thermo_style    custom step time temp pe ke etotal press
+run             50000
+
+print "=== STAGE1 DONE ==="
+
+# ============================================================
+# 阶段2: 生产模拟 + MSD
+# ============================================================
+print "=== STAGE2: PRODUCTION ==="
+
+compute         m_wat water msd com yes
+compute         m_Ca  Ca    msd com yes
+compute         m_fw  framework msd com yes
+fix             f_msd all ave/time 1000 1 1000 c_m_wat[4] c_m_Ca[4] c_m_fw[4] file msd.dat mode scalar
+
+thermo          5000
+thermo_style    custom step time temp pe ke etotal press
+
+# 输出轨迹 (每 200 步, 便于 RDF 后处理)
+dump            d_prod all custom 200 prod.lammpstrj id type x y z
+dump_modify     d_prod sort id
+
+run             100000
+
+unfix           f_nve
+unfix           f_lang
+undump          d_prod
+unfix           f_msd
+
+print "=== SIMULATION DONE ==="

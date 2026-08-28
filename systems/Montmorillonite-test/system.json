@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "profile": "clay_cif",
+  "seed": 42,
+  "water_model": "SPCE",
+  "title": "LAMMPS data file — Montmorillonite with interlayer water",
+  "cif_file": "Montmorillonite.cif",
+  "_comment": "体系参数单一真相源 (2026-08-28 迁移自 convert_cif.py 硬编码)。cif_binding 块为 CIF 绑定阈值 — 换 CIF 需重新标定。力场为 CLAYFF (Cygan et al. 2003), 层间水为 SPC/E。",
+  "supercell": {
+    "nx": 2,
+    "ny": 2,
+    "nz": 1
+  },
+  "interlayer_water": {
+    "target": 80,
+    "grid_xy": 4.0,
+    "grid_z": 3.0,
+    "min_dist_o_fw": 4.0,
+    "min_dist_h_fw": 2.5
+  },
+  "cif_binding": {
+    "oh_frac_z_min": 0.289,
+    "oh_frac_z_max": 0.296,
+    "z_ob_max": 1.5,
+    "z_obos_max": 3.0,
+    "z_oh_min": 3.5,
+    "z_oh_max": 5.5
+  },
+  "atom_types": [
+    {"id": 1, "name": "ob", "charge": -0.8, "mass": 15.999, "eps": 0.15539, "sigma": 3.1655,
+     "source": "CLAYFF (Cygan et al. 2003) 桥氧", "confidence": "高"},
+    {"id": 2, "name": "obos", "charge": -0.9, "mass": 15.999, "eps": 0.15539, "sigma": 3.1655,
+     "source": "CLAYFF (Cygan et al. 2003) 桥/顶角氧", "confidence": "高"},
+    {"id": 3, "name": "oh", "charge": -0.9, "mass": 15.999, "eps": 0.15539, "sigma": 3.1655,
+     "source": "CLAYFF (Cygan et al. 2003) 羟基氧", "confidence": "高"},
+    {"id": 4, "name": "ho", "charge": 0.425, "mass": 1.008, "eps": 0.0, "sigma": 0.0,
+     "source": "CLAYFF (Cygan et al. 2003) 羟基氢", "confidence": "高"},
+    {"id": 5, "name": "st", "charge": 2.1, "mass": 28.086, "eps": 1.84e-6, "sigma": 3.7064,
+     "source": "CLAYFF (Cygan et al. 2003) 四面体 Si", "confidence": "高"},
+    {"id": 6, "name": "ao", "charge": 1.575, "mass": 26.982, "eps": 5.56e-6, "sigma": 4.2713,
+     "source": "CLAYFF (Cygan et al. 2003) 八面体 Al", "confidence": "高"},
+    {"id": 7, "name": "ca", "charge": 2.0, "mass": 40.078, "eps": 0.235, "sigma": 3.095,
+     "source": "CLAYFF (Cygan et al. 2003) 层间 Ca", "confidence": "高"},
+    {"id": 8, "name": "ow", "charge": -0.8476, "mass": 15.999, "eps": 0.15539, "sigma": 3.1655,
+     "source": "电荷: SPC/E; LJ: CLAYFF O 值 (沿用 convert_cif.py 原表)",
+     "confidence": "中",
+     "warning": "LJ 为 CLAYFF O 值; 严格 SPC/E Ow LJ = 0.1553/3.166 (见 common/spce_params)"},
+    {"id": 9, "name": "hw", "charge": 0.4238, "mass": 1.008, "eps": 0.0, "sigma": 0.0,
+     "source": "SPC/E 水氢", "confidence": "高"}
+  ]
+}

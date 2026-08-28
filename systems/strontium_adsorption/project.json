@@ -1,0 +1,12 @@
+{
+  "id": "strontium_adsorption",
+  "name": "SrCl₂ 带电表面吸附",
+  "description": "SPC/E 水 + 带电表面 + Sr²⁺/Cl⁻ 吸附研究 (system.json → build → run → analyze)",
+  "builtin": true,
+  "profile": "surface_adsorption",
+  "method_id": "nvt_production",
+  "method_params": {},
+  "run_script": "run.lmp",
+  "rendered_sha": "5000e6396de5480d979b3d44d08166c43e0260fb048b468c1c18522546a88aa9",
+  "note": "run.lmp 为模板渲染产物 (历史手写脚本归档于 archive/run_final.handwritten.lmp)"
+}

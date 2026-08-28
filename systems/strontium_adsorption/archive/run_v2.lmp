@@ -1,0 +1,71 @@
+# SrCl2 吸附模拟 - 带电表面 + SPC/E 水
+
+units                   real
+atom_style              full
+boundary                p p p
+
+read_data               /data/strontium_adsorption/system.data
+
+# 分组
+group                   surf type 1
+group                   water type 2 3
+group                   sr type 4
+group                   cl type 5
+group                   mobile type 2 3 4 5
+
+# 固定表面
+fix                     fsurf1 surf setforce 0 0 0
+
+# 力场: SPC/E 水
+pair_style              lj/cut/coul/long 9.0 9.0
+kspace_style            pppm 1e-4
+pair_modify             mix arithmetic
+
+# Surf-Surf (近似 CLAYFF O 参数)
+pair_coeff              1 1 0.1554 3.1655
+# Ow-Ow (SPC/E)
+pair_coeff              2 2 0.1553 3.1660
+# SPC/E H (无 LJ)
+pair_coeff              3 3 0.0 1.0
+# Sr²⁺
+pair_coeff              4 4 0.1 3.0
+# Cl⁻
+pair_coeff              5 5 0.1 4.0
+
+# 键/角 (SPC/E)
+bond_style              harmonic
+bond_coeff              1 554.1349 1.0
+
+angle_style             harmonic
+angle_coeff             1 45.7696 109.47
+
+special_bonds           lj 0.0 0.0 0.5 coul 0.0 0.0 0.5
+
+# 邻居列表
+neighbor                2.0 bin
+neigh_modify            delay 10 every 1 check yes
+
+# 输出
+thermo                  100
+thermo_style            custom step temp pe ke etotal press
+thermo_modify           lost ignore
+
+# 最小化
+min_style               cg
+minimize                1e-4 1e-6 500 5000
+
+print "=== 最小化完成 ==="
+
+# NVT 300 K
+velocity                mobile create 300.0 12345
+fix                     fnvt mobile nvt temp 300.0 300.0 100.0
+timestep                0.5
+run                     5000
+
+print "=== 平衡完成 ==="
+
+# 生产模拟
+dump                    dmp1 all custom 50 /data/strontium_adsorption/traj.dump id type x y z
+run                     10000
+
+print "=== 生产模拟完成 ==="

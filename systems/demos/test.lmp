@@ -1,0 +1,13 @@
+# 最小化测试脚本 - 验证环境用
+units           metal
+atom_style      atomic
+lattice         fcc 4.06
+region          box block 0 5 0 5 0 5
+create_box      1 box
+create_atoms    1 region box
+mass            1 26.98
+pair_style      lj/cut 2.5
+pair_coeff      1 1 0.0104 4.06
+fix             1 all nve
+run             10
+print "=== LAMMPS SCRIPT EXECUTED SUCCESSFULLY ==="

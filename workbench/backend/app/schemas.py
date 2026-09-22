@@ -40,6 +40,12 @@ class FileSaveRequest(BaseModel):
     content: str
 
 
+class ScanRequest(BaseModel):
+    param_key: str  # 方法模板参数键 (如 temperature)
+    values: list[float]
+    omp_threads: int = 8
+
+
 class JobOut(BaseModel):
     id: str
     project_id: str
@@ -55,6 +61,12 @@ class JobOut(BaseModel):
     log_path: Optional[str] = None
     workspace: Optional[str] = None
     omp_threads: int = 8
+    source: str = "workbench"
+    batch: Optional[str] = None
+
+
+class JobResumeOut(JobOut):
+    source_restart: Optional[str] = None
 
 
 class JobDetailOut(JobOut):

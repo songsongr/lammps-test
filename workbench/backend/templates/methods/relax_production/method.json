@@ -1,0 +1,13 @@
+{
+  "id": "relax_production",
+  "name": "多段弛豫 + 检查点 (min → 退火 → 平衡 → 生产)",
+  "description": "三段弛豫协议 (RadonPy 思想): 能量最小化 → NVT 退火升温 → NVT 平衡 → 生产; 每段写 restart 检查点, 失败可从检查点续跑",
+  "params": [
+    {"key": "temperature", "label": "目标温度 (K)", "type": "number", "default": 300.0},
+    {"key": "timestep_fs", "label": "时间步 (fs)", "type": "number", "default": 2.0},
+    {"key": "equil_steps", "label": "平衡段步数 (min 后 NVT)", "type": "int", "default": 50000},
+    {"key": "prod_steps", "label": "生产步数", "type": "int", "default": 50000},
+    {"key": "dump_interval", "label": "轨迹输出间隔 (步)", "type": "int", "default": 100},
+    {"key": "velocity_seed", "label": "速度初始化种子", "type": "int", "default": 12345}
+  ]
+}

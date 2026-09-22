@@ -6,9 +6,13 @@
   "method_id": "nvt_production",
   "method_params": {
     "temperature": 320.0,
-    "prod_steps": 20000
+    "equil_steps": 5000,
+    "prod_steps": 2000,
+    "dump_interval": 50,
+    "do_minimize": true
   },
   "created_at": "2026-08-28T05:22:57",
-  "rendered_sha": "fcb76d7c6005e63a78dea7d7ff6882855769d88a4b6cea2173e42befdeec01e2",
-  "built_system_sha": "de2438e43aeb3a05f82d90aca93b453d05d2e7fe77787cf7cd77f9699a533985"
+  "rendered_sha": "32e988d396ff8de5f570973365ff98f2b5f11ceafa35ea854c1d283fa0f64b8c",
+  "built_system_sha": "de2438e43aeb3a05f82d90aca93b453d05d2e7fe77787cf7cd77f9699a533985",
+  "note": "向导测试项目: 方法参数刻意调小 (秒级完成), 用于链路验证与功能演示"
 }

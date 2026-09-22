@@ -112,7 +112,7 @@ neighbor                2.0 bin
 thermo_modify           lost ignore flush yes
 # thermo_modify — lost ignore 忽略原子漂出警告; flush yes 实时刷新日志
 
-thermo_style           custom step temp press density toteng
+thermo_style           custom step temp press density etotal
 # thermo_style — 输出列含 density: 工作台平衡判据需要密度+总能量做末窗口漂移检验
 #               (「热力学曲线」卡据此显示平衡质量胶囊)
 
@@ -170,12 +170,12 @@ print "=== NVT DONE ==="
 
 print "=== PRODUCTION ==="
 
-dump                    dmp1 all custom {{ params.dump_interval }} prod.lammpstrj id type x y z
-# dump — 每 {{ params.dump_interval }} 步输出一帧轨迹 prod.lammpstrj (VMD/OVITO 可读)
+dump                    dmp1 all custom {{ params.dump_interval }} prod.lammpstrj id type x y z xu yu zu
+# dump — xu/yu/zu 为非包裹坐标 (MSD 必需; 包裹坐标跨界会产生假位移) — 每 {{ params.dump_interval }} 步输出一帧轨迹 prod.lammpstrj (VMD/OVITO 可读)
 #   总帧数 ≈ {{ params.prod_steps }} / {{ params.dump_interval }} = {{ (params.prod_steps / params.dump_interval) | int }} 帧
 #   物理时长: {{ "%.1f" | format(params.prod_steps * params.timestep_fs / 1000.0) }} ps
 
-thermo_style           custom step temp press density toteng
+thermo_style           custom step temp press density etotal
 # thermo_style — 同上, 生产段输出含 density
 
 thermo                  5000
@@ -183,6 +183,9 @@ thermo                  5000
 
 run                     {{ params.prod_steps }}
 # run {{ params.prod_steps }} — 生产模拟
+
+write_restart           checkpoint_prod.restart
+# write_restart — 检查点: 生产完成态 (工作台「检查点续跑」的起点)
 
 print "=== PRODUCTION DONE ==="
 # 日志出现此行 = 模拟正常结束

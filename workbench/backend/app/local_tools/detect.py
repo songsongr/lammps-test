@@ -19,6 +19,8 @@ def _common_paths_vmd() -> list[str]:
         return [
             r"C:\Program Files\VMD\vmd.exe",
             r"C:\Program Files (x86)\VMD\vmd.exe",
+            r"C:\Program Files\VMD2\vmd.exe",
+            r"C:\Program Files\VMD 2.0\vmd.exe",
             os.path.expandvars(r"%LOCALAPPDATA%\Programs\VMD\vmd.exe"),
         ]
     if _SYSTEM == "Darwin":
@@ -37,6 +39,7 @@ def _common_paths_vesta() -> list[str]:
             r"C:\Program Files\Vesta\VESTA.exe",
             r"C:\Program Files\Vesta-win64\VESTA.exe",
             r"C:\Program Files (x86)\Vesta\VESTA.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\VESTA-win64\VESTA.exe"),
             os.path.expandvars(r"%LOCALAPPDATA%\Programs\Vesta\VESTA.exe"),
         ]
     if _SYSTEM == "Darwin":
@@ -61,12 +64,13 @@ def _search(env_var: str, paths: list[str]) -> tuple[str | None, str]:
 
 
 def _version_hint(path: str) -> str | None:
-    """从路径里抓版本号, 仅作展示。"""
+    """从路径里抓版本号, 仅作展示 (跳过 win64/x64 这类位数段)。"""
     if not path:
         return None
     base = os.path.basename(os.path.dirname(path))
-    m = re.search(r"(\d+(?:\.\d+){0,2})", base)
-    return m.group(1) if m else None
+    base = re.sub(r"(?i)(win|x)6[48]", "", base)  # VESTA-win64 → VESTA-
+    m = re.search(r"\d+(?:\.\d+)+", base)  # 至少两段才算版本号 (VMD2 的 "2" 不误报)
+    return m.group(0) if m else None
 
 
 def detect() -> dict:

@@ -72,6 +72,30 @@ system.json ──► 构建引擎 (common/builders) ──► system.data + bui
 | 教学 demo（demos） | —（自包含脚本） | — | `adsorption.lmp`、`test.lmp` | — |
 | 用户项目（projects/） | 向导生成 `system.json` | `python -m common.build projects/<id>` | `run.lmp`（渲染产物） | — |
 
+## 从历史散落研究迁移进来（agent 辅助）
+
+如果你之前跑过 LAMMPS 但没接触过本工作台，旧资料（`.lmp` / `system.data` / Python 分析脚本 / 轨迹日志 / 散落输出）
+可能散落在你电脑某处。可以让 agent 把它们**扫描 → 识别 → 结构化迁移**进来。
+
+**标准做法**：
+
+1. 在工作台「项目与脚本」页右上「手动创建指南」抽屉顶部「0. 从历史散落研究迁移进来」
+   复制那段提示词模板，按你的情况填实占位符（**必填**：旧资料根目录绝对路径）
+2. 把填好的提示词发给 agent
+3. agent 工作流：
+   - 扫描旧目录，分类列出（**不会读大轨迹/日志全文**）
+   - 按角色归类（run / analyze / system_data / artifact）并识别研究主题
+   - 在 `projects/_inbox/<project_id>/` 下建立结构化副本
+     （`project.json` + `run.lmp` / `analyze.py` + `README.md` + `migration_manifest.md`）
+   - **不修改**原路径任何文件，工作台内副本可自由改
+4. agent 完成后告诉你待入库项目 id，你点抽屉底部的「确认入库」即正式注册
+   （之后与新建项目走同一发现机制）
+
+**为什么走 `_inbox/` 暂存**：迁移是一个有判断成本的操作
+（哪些算脚本、哪些是中间产物、研究主题叫什么、id 怎么取），中间让用户对账比一次性自动注册更安全。
+
+**与「手动创建项目」的关系**：本节是「先把旧资料拉进来」，下一节是「直接建新项目」。两条入口都在抽屉里。
+
 ## 手动创建项目（文件系统直建）
 
 向导之外，任意体系都可以直接在 `projects/` 下建目录、写文件 — 平台按约定自动发现（实时扫描，零重启）：
@@ -89,6 +113,20 @@ projects/my-tensile/
 - 任务产物在 `lammps-data-docker/jobs/<任务id>/`；Python 分析输出到脚本同目录
 - 工作台「项目与脚本」页右上「手动创建指南」抽屉与本节同源，界面内可查
 - CLI 与工作台同契约（common.runner），但「任务记录」仅收录工作台发起的任务
+
+## 任务队列 / 续跑 / 参数扫描 / CLI 入库 (2026-08-29 起)
+
+- **队列**：LAMMPS 并发上限 `MAX_CONCURRENT_LMP`（config.py，默认 1）；超限自动排队（queued），
+  前序完成自动启动；后端重启后排队任务重新入队。CLI 与工作台任务同队列
+- **检查点续跑**：模板每阶段 `write_restart`；任务详情页「检查点续跑」输步数即发新任务
+  （read_restart 跨工作区引用源检查点 + fix/kspace 从原脚本重建）。CLI 等价:
+  `POST /api/jobs/<id>/resume`
+- **参数扫描**：体系配置页「参数扫描」选参数+值列表 → 每值渲染脚本副本（只写任务工作区）批量入队；
+  任务列表勾选同批次任务点「对比」叠加 thermo 曲线
+- **CLI 任务入库**：`uv run run-sr-sim` 等现在写入任务记录（source=cli）——双入口同一本账；
+  运行中的 CLI 任务工作台不可取消（终端 Ctrl+C）
+- **agent 诊断**：`uv run python -m workbench.backend.app.diagnose --job <id> --json`
+  （离线读任务库，输出 lint/失败解析/检查点；skill 版见 skills/lammps-diagnose/）
 
 ## 路径约定（IMPORTANT）
 

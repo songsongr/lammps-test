@@ -25,6 +25,9 @@ workbench/data/
 workbench/frontend/node_modules/
 workbench/frontend/dist/
 
+# 历史研究迁移暂存区 (用户旧资料副本, 可能含大文件, 确认入库前不进 git)
+projects/_inbox/
+
 # AI 会话本地文件 / Python 构建产物
 .claude/
 .zcode/

@@ -1,7 +1,11 @@
-# 01_run.lmp — 蒙脱石模拟: 平衡→生产(MSD+RDF轨迹)
+# 01_run.lmp — 蒙脱石模拟: 最小化→平衡→生产(MSD+RDF轨迹)
 # 力场数值 (pair_coeff/bond/angle) 的单一真相源为 system.json atom_types
-#   — 本脚本与之核对一致 (2026-08-28); 修改参数请改 system.json 后重建
+#   — 本脚本与之核对一致 (2026-09-04); 修改参数请改 system.json 后重建
 # 体系构建: uv run python -m common.build Montmorillonite-test
+# 2026-09-04 动力学修复: system.json cif_binding.oh_frac_z_max 0.296→0.2925
+#   清除 16 个误分类顶氧幻影 H (H-Si 0.616 A, 库仑斥力爆炸根因) 后,
+#   旧版 nve/limit 0.05 + langevin 的 4260K 伪稳态不再需要 —
+#   改为 minimize + 正规 nve/langevin (v2-v5 修复失败的根因即缺陷接触仍在)
 
 units           real
 atom_style      full
@@ -33,31 +37,46 @@ pair_coeff      6 6           5.56e-6   4.2713
 pair_coeff      7 7           0.23500   3.0950
 pair_coeff      8 8           0.15539   3.1655
 pair_coeff      9 9           0.0       0.0
+# bond type 1 (554.13/1.0, CLAYFF O-H) 同时覆盖层间水 2x160 与骨架羟基 8 条 O-H 键
 bond_coeff      1            554.13    1.0
 angle_coeff     1             45.77  109.47
 
 # ============================================================
-# 阶段1: NVE/limit + Langevin 弛豫
+# 阶段1: 能量最小化 (清除构建残差应力; 缺陷接触已除, cg 可收敛)
 # ============================================================
-print "=== STAGE1: RELAXATION ==="
+print "=== STAGE1: MINIMIZATION ==="
+
+thermo          1000
+thermo_style    custom step temp pe ke etotal press fmax
+min_style       cg
+minimize        1.0e-6 1.0e-6 10000 100000
+
+print "=== STAGE1 DONE ==="
+
+# ============================================================
+# 阶段2: NVE + Langevin 300K 平衡 (正规动力学, 无位移限速)
+# ============================================================
+print "=== STAGE2: RELAXATION ==="
 
 reset_timestep  0
 velocity        all create 300.0 12345
 timestep        0.5
 
-fix             f_nve all nve/limit 0.05
+fix             f_nve all nve
 fix             f_lang all langevin 300.0 300.0 10.0 12345
 
 thermo          5000
-thermo_style    custom step time temp pe ke etotal press
+thermo_style    custom step time temp pe ke etotal press fmax
 run             50000
+write_restart   checkpoint_stage1.restart
+# write_restart — 检查点: 弛豫段完成态 (工作台可从此续跑)
 
-print "=== STAGE1 DONE ==="
+print "=== STAGE2 DONE ==="
 
 # ============================================================
-# 阶段2: 生产模拟 + MSD
+# 阶段3: 生产模拟 + MSD
 # ============================================================
-print "=== STAGE2: PRODUCTION ==="
+print "=== STAGE3: PRODUCTION ==="
 
 compute         m_wat water msd com yes
 compute         m_Ca  Ca    msd com yes
@@ -65,13 +84,15 @@ compute         m_fw  framework msd com yes
 fix             f_msd all ave/time 1000 1 1000 c_m_wat[4] c_m_Ca[4] c_m_fw[4] file msd.dat mode scalar
 
 thermo          5000
-thermo_style    custom step time temp pe ke etotal press
+thermo_style    custom step time temp pe ke etotal press fmax
 
 # 输出轨迹 (每 200 步, 便于 RDF 后处理)
-dump            d_prod all custom 200 prod.lammpstrj id type x y z
+dump            d_prod all custom 200 prod.lammpstrj id type x y z xu yu zu
 dump_modify     d_prod sort id
 
 run             100000
+write_restart   checkpoint_prod.restart
+# write_restart — 检查点: 生产完成态
 
 unfix           f_nve
 unfix           f_lang

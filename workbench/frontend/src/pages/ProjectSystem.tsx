@@ -102,20 +102,37 @@ export default function ProjectSystem({
   const [building, setBuilding] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanParam, setScanParam] = useState("");
+  const [scanValues, setScanValues] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [methodParams, setMethodParams] = useState<{ key: string; label: string }[]>([]);
 
   const load = useCallback(() => {
+    let closed = false;  // 防跨项目竞态: 慢响应覆盖新项目
     api
       .getSystem(projectId)
       .then((d) => {
+        if (closed) return;
         setCfg(d.config);
+        if (closed) return;
         setConsistency(d.consistency ?? null);
         setErrors(d.errors);
+        if (d.meta?.method_id) {
+          api.templates().then((tp) => {
+            const m = tp.methods.find((x) => x.id === d.meta.method_id);
+            setMethodParams(m ? m.params.map((p2) => ({ key: p2.key, label: p2.label })) : []);
+            setScanParam((prev) => prev || (m?.params[0]?.key ?? ""));
+          }).catch(() => {});
+        }
       })
-      .catch((e) => setLoadError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => { if (!closed) setLoadError(e instanceof Error ? e.message : String(e)); });
+    return () => { closed = true; };
   }, [projectId]);
 
   useEffect(() => {
-    load();
+    const cleanup = load();
+    return cleanup;
   }, [load]);
 
   // cfg 载入后按 profile 取对应 schema (用于表单标签)
@@ -161,17 +178,48 @@ export default function ProjectSystem({
   };
   const handleOpenVesta = async (dataPath: string) => {
     if (!dataPath) { message.error("无 system.data 路径"); return; }
+    // 走真一键: 后端 spawn vesta + 自动 .data→.xyz 临时文件转换
+    const hide = message.loading("正在启动 Vesta…", 0);
     try {
-      const launcher = await api.localToolLauncher("vesta", dataPath.split("\\").join("/"));
-      const blob = new Blob([launcher.content], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = launcher.filename;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      if (!launcher.found) message.warning("未检测到 Vesta 可执行文件; 启动器会提示, 请先在仪表盘「本地工具」配置");
-      else message.success(`已下载 ${launcher.filename} — 双击运行即可打开 Vesta`);
-    } catch (e) { message.error(`启动器生成失败: ${e instanceof Error ? e.message : String(e)}`); }
+      const result = await api.openWithTool("vesta", dataPath.split("\\").join("/"), true);
+      hide();
+      if (result.ok && result.spawned) {
+        message.success(`已启动 Vesta (pid ${result.pid ?? "?"})`);
+        return;
+      }
+      if (result.fallback === "launcher" && result.content) {
+        const blob = new Blob([result.content], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = result.filename || "open-vesta.bat";
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        message.warning(result.message || "已下载启动器, 请双击运行");
+      } else {
+        message.error(result.message || "启动失败");
+      }
+    } catch (e) {
+      hide();
+      message.error(`启动失败: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const runScan = async () => {
+    const tokens = scanValues.split(/[,\s]+/).filter(Boolean);
+    const bad = tokens.filter((tk) => Number.isNaN(Number(tk)));
+    if (bad.length) { message.error(`这些值不是数字: ${bad.join(", ")}`); return; }
+    const values = tokens.map(Number);
+    if (!scanParam || values.length === 0) { message.error("请填写参数与值列表 (如 320, 340, 360)"); return; }
+    if (values.length > 20) { message.error("单次最多 20 个值"); return; }
+    setScanning(true);
+    try {
+      const r = await api.scanProject(projectId, scanParam, values, 8);
+      message.success(`扫描批次 ${r.batch}: ${r.jobs.length} 个任务已入队 (${r.param} = ${r.values.join(", ")})`);
+      setScanOpen(false);
+      onOpenJob(r.jobs[0].id);
+    } catch (e) {
+      message.error(`扫描失败: ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setScanning(false); }
   };
 
   const rebuild = async () => {
@@ -275,6 +323,11 @@ export default function ProjectSystem({
               <button className="mini-btn" onClick={() => setPreviewOpen(true)} title="浏览器内 3D 预览 + 一键启动 Vesta">
                 <EyeOutlined style={{ marginRight: 5 }} />
                 预览 3D 结构
+              </button>
+              <button className="mini-btn accent" disabled={methodParams.length === 0}
+                onClick={() => setScanOpen(true)}
+                title="对一个方法参数取多个值, 批量渲染脚本并排队执行">
+                参数扫描
               </button>
             </>
           )}
@@ -476,6 +529,44 @@ export default function ProjectSystem({
         onClose={() => setPreviewOpen(false)}
         onOpenVesta={handleOpenVesta}
       />
+      <Modal
+        title="参数扫描"
+        open={scanOpen}
+        onCancel={() => setScanOpen(false)}
+        onOk={runScan}
+        confirmLoading={scanning}
+        okText={`发车 (${scanValues.split(/[\s,]+/).filter(Boolean).length} 个任务)`}
+        cancelText="取消"
+      >
+        <div style={{ display: "grid", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 4 }}>扫描参数</div>
+            <select
+              className="sys-input"
+              value={scanParam}
+              onChange={(e) => setScanParam(e.target.value)}
+              style={{ width: "100%" }}
+            >
+              {methodParams.map((p) => (
+                <option key={p.key} value={p.key}>{p.label} ({p.key})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 4 }}>
+              值列表 (逗号/空格分隔, 最多 20 个)
+            </div>
+            <input className="sys-input" style={{ width: "100%" }}
+              placeholder="320, 340, 360"
+              value={scanValues}
+              onChange={(e) => setScanValues(e.target.value)} />
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.7 }}>
+            每个值渲染一份脚本副本 (仅写入任务工作区, 项目文件不动), 任务进入队列串行执行;
+            完成后在任务记录页勾选同批次任务点「对比」可叠加 thermo 曲线。
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -484,6 +575,7 @@ function System3DPreview({ projectId, open, onClose, onOpenVesta }: {
   projectId: string; open: boolean; onClose: () => void; onOpenVesta: (path: string) => void;
 }) {
   const viewerRef = useRef<HTMLDivElement>(null);
+  const viewerInst = useRef<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [dataPath, setDataPath] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -495,18 +587,24 @@ function System3DPreview({ projectId, open, onClose, onOpenVesta }: {
       fetch("/api/projects/" + encodeURIComponent(projectId) + "/system-data")
         .then(r => r.ok ? r.json() : r.json().then(b => Promise.reject(new Error(b?.detail || "无 system.data — 请先「重建体系」"))))
         .then(d => {
-          if (!d.text) throw new Error("system.data 为空");
+          if (d.xyz_error) throw new Error("结构转换失败: " + d.xyz_error);
+          if (!d.xyz) throw new Error("system.data 为空");
           setDataPath(d.path);
-          setTimeout(() => render(d.text), 60);
+          // 3Dmol 不支持 LAMMPS data 格式 — 后端已转为 XYZ
+          setTimeout(() => render(d.xyz), 60);
         })
         .catch(e => { setStatus("missing"); setError(e instanceof Error ? e.message : String(e)); });
     };
-    const render = (text: string) => {
+    const render = (xyz: string) => {
       if (!viewerRef.current || !w.$3Dmol) return;
       try {
-        viewerRef.current.innerHTML = "";
-        const viewer = w.$3Dmol.createViewer(viewerRef.current, { backgroundColor: "#fcfcfa" });
-        viewer.addModel(text, "data");
+        // 复用 viewer 实例 (GLContext 有浏览器上限); clear 保留本体
+        if (!viewerInst.current) {
+          viewerInst.current = w.$3Dmol.createViewer(viewerRef.current, { backgroundColor: "#fcfcfa" });
+        }
+        const viewer = viewerInst.current;
+        viewer.clear();
+        viewer.addModel(xyz, "xyz");
         viewer.setStyle({}, { stick: { radius: 0.18 }, sphere: { scale: 0.25 } });
         viewer.zoomTo();
         viewer.render();
@@ -547,6 +645,7 @@ function System3DPreview({ projectId, open, onClose, onOpenVesta }: {
       )}
       <div
         ref={viewerRef}
+        id={`sys3d-viewer-${projectId}`}
         style={{
           height: 480, border: "1px solid var(--border)", borderRadius: 12, marginTop: 10,
           display: status === "ready" ? "block" : "none",

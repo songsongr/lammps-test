@@ -12,7 +12,7 @@ import {
 import type { ThermoData } from "../api/client";
 
 const PALETTE = ["#3547e8", "#12994e", "#e5484d", "#0e9384", "#d97706", "#7c5cfc", "#64748b"];
-const CANDIDATE_SERIES = ["Temp", "PotEng", "E_pair", "TotEng", "KinEng", "Press", "Volume"];
+const CANDIDATE_SERIES = ["Temp", "PotEng", "E_pair", "TotEng", "KinEng", "Press", "Volume", "Fmax"];
 const MAX_POINTS = 1000; // 渲染上限, 超出取最近
 
 export default function ThermoChart({ data }: { data: ThermoData }) {
@@ -38,6 +38,8 @@ export default function ThermoChart({ data }: { data: ThermoData }) {
 
   if (!data.columns.length || !data.rows.length) return null;
   const stepKey = data.columns[0]; // 恒为 "Step"
+  // fmax (力, kcal/mol/Å) 量纲不同 → 独立右轴 (弛豫收敛双轴视图)
+  const hasFmax = data.columns.some((c) => c.toLowerCase() === "fmax");
 
   const toggle = (c: string) => {
     setVisible((prev) => {
@@ -86,12 +88,24 @@ export default function ThermoChart({ data }: { data: ThermoData }) {
             domain={["dataMin", "dataMax"]}
           />
           <YAxis
+            yAxisId="left"
             width={62}
             tick={{ fontSize: 11, fill: "#a3a39a" }}
             tickLine={false}
             axisLine={false}
             domain={["auto", "auto"]}
           />
+          {hasFmax && (
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              width={58}
+              tick={{ fontSize: 11, fill: "#a3a39a" }}
+              tickLine={false}
+              axisLine={false}
+              domain={["auto", "auto"]}
+            />
+          )}
           <Tooltip
             contentStyle={{
               borderRadius: 10,
@@ -105,6 +119,7 @@ export default function ThermoChart({ data }: { data: ThermoData }) {
               visible.has(c) && (
                 <Line
                   key={c}
+                  yAxisId={c.toLowerCase() === "fmax" && hasFmax ? "right" : "left"}
                   type="monotone"
                   dataKey={c}
                   stroke={PALETTE[i % PALETTE.length]}

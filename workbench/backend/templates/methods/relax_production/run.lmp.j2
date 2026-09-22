@@ -1,0 +1,166 @@
+# [generated] 本文件由方法模板 {{ method_id }} 渲染生成 (体系: {{ system.profile }})
+# 重新渲染会覆盖本文件; 如需手改, 建议另存副本或在保存前确认覆盖提示。
+# 体系参数 (组成/力场/来源) 的单一真相源为本项目 system.json。
+
+# ============================================================
+# {{ system.title | default("LAMMPS 模拟", true) }}
+# ============================================================
+# 模板: {{ method_id }} — 多段弛豫 + 检查点 (RadonPy 思想)
+# 协议: 能量最小化 → NVT 退火 (0.5T→T) → NVT 平衡 → 生产
+# 每个关键阶段后写 restart 检查点; 失败可从工作区最新 restart 续跑
+# 温度: {{ params.temperature }} K | 时间步: {{ params.timestep_fs }} fs
+# 平衡: {{ params.equil_steps }} 步 | 生产: {{ params.prod_steps }} 步
+
+# ============================================================
+# 第 1 部分: 全局设置
+# ============================================================
+
+units                   real
+# units real — kcal/mol / Å / fs / e / K (力场参数惯例)
+
+atom_style              full
+# atom_style full — 含 molecule-ID 与电荷 (水成键 + 库仑)
+
+boundary                p p p
+# boundary p p p — 全周期 (PPPM 要求); z 向真空层减弱镜像干扰
+
+# ============================================================
+# 第 2 部分: 读入体系数据
+# ============================================================
+
+read_data               system.data
+# read_data — 构建引擎从 system.json 生成的 system.data
+
+# ============================================================
+# 第 3 部分: 分组
+# ============================================================
+
+{% if surf_id %}
+group                   surf type {{ surf_id }}
+# group surf — 表面原子 (type {{ surf_id }} = {{ surf_name }})
+
+fix                     f_fix surf setforce 0 0 0
+# fix setforce 0 0 0 — 冻结表面
+{% endif %}
+group                   water type {{ ow_id }} {{ hw_id }}
+# group water — 水分子原子
+
+{% for ion in ion_types %}
+group                   ion_{{ ion.name | lower }} type {{ ion.id }}
+# group ion_{{ ion.name | lower }} — 离子 {{ ion.name }}
+{% endfor %}
+group                   mobile union water{% for ion in ion_types %} ion_{{ ion.name | lower }}{% endfor %}
+# group mobile — 可移动原子 (恒温器作用组)
+
+# ============================================================
+# 第 4 部分: 非键力场 (LJ + 库仑)
+# ============================================================
+
+pair_style              lj/cut/coul/long 9.0 8.0
+# pair_style — LJ(8 Å) + 库仑(9 Å + PPPM)
+
+kspace_style            pppm 1e-4
+# kspace_style pppm 1e-4 — 长程静电
+
+pair_modify             mix arithmetic
+# pair_modify mix arithmetic — 交叉项混合规则
+
+{% for t in system.atom_types %}
+pair_coeff              {{ t.id }} {{ t.id }} {{ t.eps }} {{ t.sigma }}
+#   type {{ t.id }} ({{ t.name }}): ε={{ t.eps }}, σ={{ t.sigma }} | 来源: {{ t.source }} | 置信度: {{ t.confidence }}
+{% if t.warning %}
+#   ⚠ {{ t.warning }}
+{% endif %}
+{% endfor %}
+
+# ============================================================
+# 第 5 部分: 分子内力场 (刚性水)
+# ============================================================
+
+bond_style              harmonic
+bond_coeff              1 554.1349 1.0
+# bond_coeff — O-H: K=554.13, r0=1.0 Å (SPC/E)
+
+angle_style             harmonic
+angle_coeff             1 45.7696 109.47
+# angle_coeff — H-O-H: K=45.77, θ0=109.47°
+
+special_bonds           lj 0.0 0.0 0.5 coul 0.0 0.0 0.5
+# special_bonds — 1-2/1-3 排除, 1-4 减半
+
+# ============================================================
+# 第 6 部分: 模拟控制
+# ============================================================
+
+neighbor                2.0 bin
+thermo_modify           lost ignore flush yes
+
+thermo_style            custom step temp press density etotal fmax
+# thermo_style — 含 density (平衡判据) 与 fmax (弛豫收敛, 工作台双轴图右轴)
+
+thermo                  2000
+
+# ============================================================
+# 第 7 部分: 阶段 A — 能量最小化 (含 fmax 收敛观测)
+# ============================================================
+print "=== STAGE A: MINIMIZATION ==="
+
+min_style               cg
+minimize                1e-4 1e-6 500 10000
+# minimize — 消除重叠与应力; thermo 的 fmax 列展示收敛过程
+
+write_restart           checkpoint_min.restart
+# write_restart — 检查点: 最小化完成态 (可从此续跑)
+
+print "=== STAGE A DONE ==="
+
+# ============================================================
+# 第 7b 部分: SHAKE 约束 (最小化后、动力学前)
+# ============================================================
+
+fix                     fshake water shake 0.0001 20 100 b 1 a 1
+# fix shake — 刚性水, 允许 {{ params.timestep_fs }} fs 步长
+
+# ============================================================
+# 第 8 部分: 阶段 B — NVT 退火 (0.5T → T 线性升温)
+# ============================================================
+print "=== STAGE B: ANNEALING (0.5T start -> T) ==="
+
+velocity                mobile create 0.5*{{ params.temperature }} {{ params.velocity_seed }}
+# velocity — 从半温启动: NVT 目标温恒为 T, 体系由 0.5T 自然弛豫升温 (温和的退火近似,
+#           避免满速初始化对最小化构型的冲击)
+
+fix                     fannl mobile nvt temp {{ params.temperature }} {{ params.temperature }} 100.0
+# fix nvt — Nose-Hoover 恒温器 (目标温 T, 阻尼 100 fs)
+
+timestep                {{ params.timestep_fs }}
+
+run                     {{ params.equil_steps }}
+# run — 退火/平衡 {{ params.equil_steps }} 步 (半温启动在 NVT 下自然弛豫到目标温)
+
+write_restart           checkpoint_equil.restart
+# write_restart — 检查点: 平衡完成态 (续跑/追加弛豫的起点)
+
+print "=== STAGE B DONE ==="
+
+# ============================================================
+# 第 9 部分: 阶段 C — 生产模拟
+# ============================================================
+print "=== STAGE C: PRODUCTION ==="
+
+reset_timestep          0
+# reset_timestep — 生产段步数归零 (轨迹时间戳从 0 起)
+
+dump                    dmp1 all custom {{ params.dump_interval }} prod.lammpstrj id type x y z xu yu zu
+# dump — xu/yu/zu 为非包裹坐标 (MSD 必需; 包裹坐标跨界会产生假位移) — 每 {{ params.dump_interval }} 步一帧
+
+thermo                  5000
+
+run                     {{ params.prod_steps }}
+# run {{ params.prod_steps }} — 生产 {{ "%.1f" | format(params.prod_steps * params.timestep_fs / 1000.0) }} ps
+
+write_restart           checkpoint_prod.restart
+# write_restart — 检查点: 生产完成态
+
+print "=== PRODUCTION DONE ==="
+# 日志出现此行 = 模拟正常结束

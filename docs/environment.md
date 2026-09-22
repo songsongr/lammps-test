@@ -61,6 +61,63 @@ docker ps --filter name=lammpsd           # 状态检查
 ssh 23653@100.95.102.42 docker exec -w /data/jobs/<id> lammpsd /usr/bin/lmp_mpi -in run.lmp
 ```
 
+## 执行后端配置（v1.8.5 起）
+
+v1.8.5 把"拼装 docker exec 命令"抽象成了 **Backend 协议**（`common/backends/`），
+现在有 2 个实现：
+
+| 后端类型 | 说明 | 状态 |
+|---|---|---|
+| `local_docker` | 本地 Docker 容器（默认；零配置开箱即用） | ✅ 完成 |
+| `remote_hpc` | 远程 HPC（sbatch 任务提交模式；ssh + rsync + sbatch） | ✅ 骨架 |
+| `remote_docker` | 远程 Docker 主机 | ⏳ v1.8.6 占位 |
+
+切换是**配置驱动**的：写入 `workbench/data/backend.json`，下次启动或调用 `get_backend()`
+时自动生效，不需要改代码。
+
+### 默认（本地 Docker）
+
+`backend.json` 不存在时，**默认走 LocalDockerBackend，行为与 v1.8.5 之前完全一致**——
+所有现有任务（CLI 与 workbench）均透明运行，不需要任何配置。
+
+### 远程 HPC
+
+```json
+// workbench/data/backend.json
+{
+  "type": "remote_hpc",
+  "ssh_host": "hpc.univ.edu",
+  "ssh_user": "alice",
+  "ssh_key_path": "/home/alice/.ssh/id_rsa",
+  "ssh_port": 22,
+  "hpc_workdir": "/home/alice/lammps",
+  "hpc_modules": ["openmpi/4.1", "lammps/20240328"],
+  "hpc_sbatch_template": "#!/bin/bash\n#SBATCH --job-name=lammps-$script\n#SBATCH --cpus-per-task=$omp\n...\n"
+}
+```
+
+字段说明：
+
+- `ssh_host` / `ssh_user`：必填，远程 HPC 入口
+- `ssh_key_path`：可选，默认走 ssh-agent / `~/.ssh/id_rsa`
+- `hpc_workdir`：远程提交根目录，每个任务建 `jobs/<id>/` 子目录
+- `hpc_modules`：`module load` 列表（远程 .bashrc 没有 module 时跳过）
+- `hpc_sbatch_template`：sbatch 脚本模板（`string.Template` 语法，可选变量
+  `$script` / `$omp` / `$workdir` / `$modules`）；不填用内置默认模板
+
+REST API（前端配置抽屉用）：
+
+- `GET  /api/backend` — 当前配置 + 探测结果
+- `GET  /api/backend/list` — 所有已注册 backend 列表（local_docker / remote_hpc）
+- `PUT  /api/backend` — 切换 backend（持久化）
+- `POST /api/backend/test` — 连通性测试（不持久化）
+
+### 远程 Docker
+
+留作 **v1.8.6**。骨架接口已就绪（Backend 协议满足），实现类是
+`common/backends/remote_docker.py`，逻辑类似 LocalDockerBackend 但 ssh 到远程主机
+后再 `docker exec`，等价于把现成的"远程 SSH 跑 docker"手动流程自动化。
+
 ## Workbench（控制中心）
 
 - 启动：`uv run workbench` → http://127.0.0.1:8000（后端 + 静态托管前端）

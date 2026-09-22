@@ -43,6 +43,9 @@ def lint_lammps_input(text: str, project_dir: str | None = None) -> dict:
                 unit = code.split()[1] if len(code.split()) > 1 else ""
                 if unit.lower() not in _UNIT_KW:
                     errors.append(f"L{lineno}: units 值 «{unit}» 不合法")
+            if first == "thermo_style" and re.search(r"\btoteng\b", code, re.IGNORECASE):
+                errors.append(
+                    f"L{lineno}: thermo_style 使用 toteng — 容器内 LAMMPS (2021.07) 不支持该关键字, 应写作 etotal (输出列名仍为 TotEng)")
             if first == "pair_style":
                 has_pair_style = True
             if first in ("run", "minimize"):

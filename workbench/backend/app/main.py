@@ -5,6 +5,7 @@
     uv run uvicorn workbench.backend.app.main:app --reload   # 后端开发模式
 """
 import argparse
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -30,6 +31,7 @@ store.init()
 async def lifespan(_: FastAPI):
     await manager.recover_orphans()  # 上次退出遗留的 running 任务 → interrupted
     await workspace.start_sweeper()  # 工作区过期清理后台任务
+    asyncio.create_task(manager.queue_sweeper())  # 队列自愈调度 (CLI 任务完成等外部事件兜底)
     yield
 
 

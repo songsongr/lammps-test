@@ -90,7 +90,7 @@ ax.legend(fontsize=11)
 ax.grid(True, alpha=0.3)
 
 fig.tight_layout()
-    fig.savefig(_p("msd_plot.png"), dpi=200)
+fig.savefig(_p("msd_plot.png"), dpi=200)
 print("  已保存 msd_plot.png")
 
 # ============================================================

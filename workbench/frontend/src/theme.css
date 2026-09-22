@@ -23,10 +23,22 @@
   --neutral-weak: rgba(29, 29, 26, 0.06);
   --teal: #0e9384;
   --teal-weak: rgba(14, 147, 132, 0.1);
-  --radius: 16px;
-  --radius-sm: 10px;
-  --shadow-1: 0 1px 2px rgba(25, 25, 20, 0.04), 0 2px 12px rgba(25, 25, 20, 0.04);
-  --shadow-2: 0 2px 4px rgba(25, 25, 20, 0.05), 0 8px 24px rgba(25, 25, 20, 0.06);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+  /* 阴影: Cal.com 多层柔和 (2026-08-30 v1.8.4 审美升级) */
+  --shadow-1: 0 1px 1px rgba(25, 25, 20, 0.04),
+              0 1px 2px rgba(25, 25, 20, 0.05),
+              0 2px 4px rgba(25, 25, 20, 0.04);
+  --shadow-2: 0 5px 20px rgba(25, 25, 20, 0.08),
+              0 10px 40px rgba(25, 25, 20, 0.03);
+  /* 双级边框 (shadcn 借鉴): 主边框更深, 次边框用于分隔线/弱间隔 */
+  --border-subtle: rgba(29, 29, 26, 0.05);
+  /* 强调色 7 态 (Cal.com 借鉴) — 任务状态/徽章语义色 */
+  --info: #253985;
+  --info-weak: rgba(37, 57, 133, 0.1);
+  --warn: #b45309;
+  --warn-weak: rgba(180, 83, 9, 0.1);
   --font-mono: "SF Mono", "Cascadia Code", Consolas, "Courier New", monospace;
 }
 
@@ -301,6 +313,36 @@ body {
   font-weight: 550;
   color: var(--text-2);
   white-space: nowrap;
+}
+
+/* 色觉友好状态通道 (WCAG 1.4.1): 语义色胶囊 + 形状符号 + 文字三通道冗余,
+   灰度下仅靠 glyph (○●✓✕⊘◆) 也能分辨状态 */
+.status-chip.tone-accent { color: var(--accent); background: var(--accent-weak); border-color: transparent; }
+.status-chip.tone-ok { color: var(--ok); background: var(--ok-weak); border-color: transparent; }
+.status-chip.tone-err { color: var(--err); background: var(--err-weak); border-color: transparent; }
+.status-chip.tone-info { color: var(--info); background: var(--info-weak); border-color: transparent; }
+.status-chip.tone-neutral { color: var(--text-2); }
+
+.status-glyph {
+  width: 13px;
+  flex: none;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.status-glyph.live {
+  animation: glyph-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes glyph-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .kind-chip {
@@ -844,6 +886,14 @@ body {
   border-color: rgba(53, 71, 232, 0.4);
 }
 
+/* 锚点复用 mini-btn (溯源包下载等): 补 a 语义缺失的盒模型与下划线, 与按钮同排对齐 */
+a.mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+}
+
 /* 着重操作 (再次运行): 靛蓝着色, 与中性操作明确区分 */
 .mini-btn.accent {
   color: var(--accent);
@@ -1130,4 +1180,318 @@ body {
   .meta-cell:nth-last-child(-n + 4) {
     border-bottom: 1px dashed var(--border);
   }
+}
+
+/* ============================================================
+   v1.8.4 审美升级 (Plane/Linear/shadcn 借鉴)
+   ============================================================ */
+
+/* 侧栏选中条: 左侧 2px 强调条 + 浅色背景, 视觉上更"在当前" */
+.nav-item.active {
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: none;
+  border-color: transparent;
+  position: relative;
+}
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 18px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+}
+
+/* KPI 胶囊 bar (Plane 借鉴): 紧凑状态胶囊, 数字 tabular-nums */
+.kpi-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+}
+.kpi-pill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(29, 29, 26, 0.02);
+  border: 1px solid var(--border-subtle);
+  min-width: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.kpi-pill:hover {
+  background: rgba(53, 71, 232, 0.04);
+  border-color: var(--border);
+}
+.kpi-pill-label {
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--text-3);
+  letter-spacing: 0.01em;
+}
+.kpi-pill-value {
+  font-size: 20px;
+  font-weight: 660;
+  letter-spacing: -0.02em;
+  font-feature-settings: "tnum";
+  line-height: 1.15;
+}
+.kpi-pill-value .unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  margin-left: 3px;
+  letter-spacing: 0;
+}
+.kpi-pill.accent .kpi-pill-value { color: var(--accent); }
+.kpi-pill.ok .kpi-pill-value { color: var(--ok); }
+.kpi-pill.err .kpi-pill-value { color: var(--err); }
+.kpi-pill.warn .kpi-pill-value { color: var(--warn); }
+
+/* Card hover 浮起 (shadcn 借鉴) */
+.card {
+  transition: box-shadow 0.15s, transform 0.05s;
+}
+.card.clickable {
+  cursor: pointer;
+}
+.card.clickable:hover {
+  box-shadow: var(--shadow-2);
+}
+
+/* 状态徽章 7 色语义 (Cal.com 借鉴): bg-color/10 text-color */
+.badge-soft {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.badge-soft.ok { background: var(--ok-weak); color: var(--ok); }
+.badge-soft.err { background: var(--err-weak); color: var(--err); }
+.badge-soft.warn { background: var(--warn-weak); color: var(--warn); }
+.badge-soft.accent { background: var(--accent-weak); color: var(--accent); }
+.badge-soft.info { background: var(--info-weak); color: var(--info); }
+.badge-soft.neutral { background: var(--neutral-weak); color: var(--text-2); }
+
+/* ============================================================
+   v1.8.4 布局升级 (shadcn/Plane/Cal.com 借鉴)
+   ============================================================ */
+
+/* 页面 section 间距: gap-2 outer / gap-4 inner (shadcn dashboard-01 借鉴) */
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.page-stack > .card + .card {
+  margin-top: 0;
+}
+
+/* section header (Card 内部小标题): 14px semibold + 分隔线 */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 620;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-header .sub {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+
+/* Filter chip: 顶/侧栏过滤芯片 (Plane 借鉴) */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--muted, var(--neutral-weak));
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.13s;
+  white-space: nowrap;
+}
+.filter-chip:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.filter-chip.active {
+  color: var(--accent);
+  border-color: rgba(53, 71, 232, 0.4);
+  background: var(--accent-weak);
+}
+.filter-chip .count {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  font-feature-settings: "tnum";
+}
+.filter-chip.active .count {
+  color: var(--accent);
+}
+
+/* 任务行式列表 (Plane 行内密度) */
+.row-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.row-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+  font-size: 11.5px;
+  font-weight: 570;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+  text-align: left;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.row-table tbody tr {
+  cursor: pointer;
+  transition: background 0.12s;
+  height: 40px;
+}
+.row-table tbody tr:hover td {
+  background: var(--neutral-weak);
+}
+.row-table tbody tr.selected td {
+  background: rgba(53, 71, 232, 0.05);
+  border-left: 2px solid var(--accent);
+}
+.row-table tbody td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  vertical-align: middle;
+}
+.row-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* (v1.8.6 色觉友好改造) 行首纯色状态点 .sdot-4 已移除,
+   表格状态列统一改用 .status-chip (形状+文字+颜色) */
+
+/* sticky 状态条 (JobDetail 顶部) */
+.sticky-status {
+  position: sticky;
+  top: 62px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  margin: 0 -32px 16px;
+  padding: 12px 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 56px;
+}
+.sticky-status .id-mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.005em;
+}
+.sticky-status .progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--neutral-weak);
+  overflow: hidden;
+  position: relative;
+}
+.sticky-status .progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* 失败诊断卡: 浮起 + 左侧 3px 红色条 */
+.failure-card-float {
+  background: var(--surface);
+  border: 1px solid rgba(229, 72, 77, 0.28);
+  border-left: 3px solid var(--err);
+  box-shadow: var(--shadow-2);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+}
+
+/* Recharts 主题适配 */
+.recharts-cartesian-axis-tick text {
+  fill: var(--text-3);
+  font-size: 10.5px;
+}
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--border-subtle);
+}
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+/* 顶栏 sticky 容器操作按钮 (主代理 UX 修复): 容器操作永远可见 */
+.kpi-action-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--err-weak);
+  border: 1px solid rgba(229, 72, 77, 0.25);
+  min-width: 0;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  color: var(--err);
+}
+.kpi-action-btn .kpi-pill-value { color: var(--err); }
+.kpi-action-btn:hover {
+  background: rgba(229, 72, 77, 0.14);
+  border-color: rgba(229, 72, 77, 0.4);
+}
+.kpi-action-btn.ok {
+  background: rgba(18, 153, 78, 0.08);
+  border-color: rgba(18, 153, 78, 0.25);
+  color: var(--ok);
+}
+.kpi-action-btn.ok .kpi-pill-value { color: var(--ok); }
+.kpi-action-btn.ok:hover {
+  background: rgba(18, 153, 78, 0.14);
+  border-color: rgba(18, 153, 78, 0.4);
 }

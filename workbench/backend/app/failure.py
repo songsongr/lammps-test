@@ -32,7 +32,10 @@ def analyze_failure(kind: str, exit_code: int | None, log_text: str) -> dict | N
 
     def _match(rule_list: list[dict], text: str) -> dict | None:
         for rule in rule_list:
-            m = re.search(rule["signature"], text)
+            try:
+                m = re.search(rule["signature"], text)
+            except re.error:  # 策展正则写坏 → 跳过该条而不是 500
+                continue
             if m:
                 return {"rule": rule, "groups": m.groups()}
         return None

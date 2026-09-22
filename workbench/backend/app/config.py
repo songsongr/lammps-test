@@ -27,6 +27,9 @@ CONTAINER_DATA_DIR = "/data"  # 须与 lammpsd 容器实际挂载一致 (health 
 # 任务工作区保留天数 (终态任务超期后由后台 sweeper 清理; 0 = 不清理)
 WORKSPACE_RETENTION_DAYS = 14
 
+# LAMMPS 并发上限 (排队调度; 单机容器默认串行, 多核大机器可调 2-4)
+MAX_CONCURRENT_LMP = 1
+
 # 前端构建产物目录 (存在时由后端静态托管)
 FRONTEND_DIST = os.path.join(ROOT, "workbench", "frontend", "dist")
 
@@ -37,6 +40,10 @@ LOCAL_TOOLS_CONFIG = os.path.join(DATA_DIR, "local_tools.json")
 # 与用户 projects/ 同一注册机制)。内置项目统一收在 systems/ 下。
 BUILTIN_DIRS = ("systems/strontium_adsorption", "systems/Montmorillonite-test", "systems/demos")
 USER_PROJECTS_DIR = os.path.join(ROOT, "projects")
+
+# 历史研究迁移暂存区 (projects/_inbox/<id>/): agent 迁移产物先落这里,
+# 用户在「手动创建指南」抽屉确认入库后才正式注册; 扫描注册时跳过本目录
+INBOX_DIR_NAME = "_inbox"
 
 
 def _load_manifest(abs_dir: str) -> dict | None:
@@ -58,7 +65,7 @@ def get_projects() -> list[dict]:
     scan_dirs: list[tuple[str, bool]] = [(d, True) for d in BUILTIN_DIRS]
     if os.path.isdir(USER_PROJECTS_DIR):
         scan_dirs += [(d, False) for d in sorted(os.listdir(USER_PROJECTS_DIR))
-                      if os.path.isdir(os.path.join(USER_PROJECTS_DIR, d))]
+                      if d != INBOX_DIR_NAME and os.path.isdir(os.path.join(USER_PROJECTS_DIR, d))]
 
     for d, is_builtin in scan_dirs:
         if d in seen_dirs:

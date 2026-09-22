@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 _JOB_COLS = ("id, project_id, project_name, script, kind, command, status, exit_code,"
              " created_at, started_at, finished_at, log_path, workspace, omp_threads, fingerprint,"
-             " source")
+             " source, batch")
 
 
 def init() -> None:
@@ -46,6 +46,8 @@ def init() -> None:
             conn.execute("ALTER TABLE jobs ADD COLUMN fingerprint TEXT")
         if "source" not in cols:
             conn.execute("ALTER TABLE jobs ADD COLUMN source TEXT DEFAULT 'workbench'")
+        if "batch" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN batch TEXT")
 
 
 def _conn() -> sqlite3.Connection:
@@ -56,12 +58,13 @@ def _conn() -> sqlite3.Connection:
 
 def insert(job: dict[str, Any]) -> None:
     job = {**job, "fingerprint": job.get("fingerprint"),
-           "source": job.get("source", "workbench")}  # 旧调用缺列时补默认
+           "source": job.get("source", "workbench"),
+           "batch": job.get("batch")}  # 旧调用缺列时补默认
     with _lock, _conn() as conn:
         conn.execute(
             f"INSERT INTO jobs ({_JOB_COLS}) VALUES (:id, :project_id, :project_name,"
             " :script, :kind, :command, :status, :exit_code, :created_at, :started_at,"
-            " :finished_at, :log_path, :workspace, :omp_threads, :fingerprint, :source)",
+            " :finished_at, :log_path, :workspace, :omp_threads, :fingerprint, :source, :batch)",
             job,
         )
 

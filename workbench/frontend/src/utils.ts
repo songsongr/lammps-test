@@ -1,15 +1,18 @@
 /** 展示辅助: 状态映射 / 尺寸 / 耗时格式化 */
 import type { JobStatus } from "./api/client";
 
+/** glyph = 形状符号 (色盲可辨第二通道, WCAG 1.4.1 不仅靠颜色传信息);
+ *  tone = 语义色 (status-chip.tone-* / badge-soft 同名类) */
 export const statusMeta: Record<
   JobStatus,
-  { label: string; dot: string }
+  { label: string; dot: string; glyph: string; tone: "accent" | "ok" | "err" | "info" | "neutral" }
 > = {
-  running: { label: "运行中", dot: "running" },
-  completed: { label: "已完成", dot: "completed" },
-  failed: { label: "失败", dot: "failed" },
-  canceled: { label: "已取消", dot: "" },
-  interrupted: { label: "已中断", dot: "" },
+  queued: { label: "排队中", dot: "", glyph: "○", tone: "neutral" },
+  running: { label: "运行中", dot: "running", glyph: "●", tone: "accent" },
+  completed: { label: "已完成", dot: "completed", glyph: "✓", tone: "ok" },
+  failed: { label: "失败", dot: "failed", glyph: "✕", tone: "err" },
+  canceled: { label: "已取消", dot: "", glyph: "⊘", tone: "neutral" },
+  interrupted: { label: "已中断", dot: "", glyph: "◆", tone: "info" },
 };
 
 export function fmtSize(n: number): string {

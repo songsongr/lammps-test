@@ -21,13 +21,15 @@ import logging
 import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from common import runner
 from common.runner import collect_deps  # noqa: F401  (兼容旧导入路径, tests 引用)
 
 from . import store, thermo
-from .config import (CONTAINER_NAME, JOBS_LOG_DIR, LAMMPS_DATA_HOST_DIR, ROOT)
+from .config import (CONTAINER_NAME, JOBS_LOG_DIR, LAMMPS_DATA_HOST_DIR,
+                     MAX_CONCURRENT_LMP, ROOT)
 from .docker_env import container_fingerprint
 
 log = logging.getLogger("workbench.jobs")
@@ -55,7 +57,7 @@ def _workspace_container(job_id: str) -> str:
 
 VALID_TRANSITIONS: dict[str, set[str]] = {
     "queued": {"running", "failed", "canceled", "interrupted"},  # 并发上限排队
-    "running": {"completed", "failed", "canceled", "interrupted"},
+    "running": {"queued", "completed", "failed", "canceled", "interrupted"},
     "interrupted": {"canceled"},  # 后端重启遗留的任务: 仍可从列表取消以清理容器进程
     "completed": set(),
     "failed": set(),
@@ -71,12 +73,13 @@ class JobManager:
         self._canceled: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
         self._thermo: dict[str, thermo.ThermoBuffer] = {}
-        self._pending: collections.deque[tuple[dict, list[str]]] = collections.deque()  # (job, command)
+        self._pending: collections.deque[tuple[dict, list[str], str | None]] = collections.deque()
 
     # ---- 任务生命周期 ----
 
     async def start(self, project_id: str, script: str, kind: str,
-                    omp_threads: int = 8) -> dict[str, Any]:
+                    omp_threads: int = 8, script_text: str | None = None,
+                    batch: str | None = None) -> dict[str, Any]:
         project = get_project(project_id)
         if project is None:
             raise ValueError(f"未知项目: {project_id}")
@@ -120,25 +123,38 @@ class JobManager:
             "workspace": workspace,
             "omp_threads": omp_threads,
             "fingerprint": json.dumps(fingerprint, ensure_ascii=False) if fingerprint else None,
+            "source": "workbench",
+            "batch": batch,
         }
 
         store.insert(job)
+        if script_text is not None:
+            # sidecar: 后端重启后 queued 任务恢复脚本文本 (否则会静默跑错参数)
+            try:
+                Path(JOBS_LOG_DIR, f"{job_id}.script").write_text(script_text, encoding="utf-8")
+            except OSError as e:
+                log.warning("script sidecar 写入失败 (%s): %s", job_id, e)
         self._tails[job_id] = collections.deque(maxlen=800)
         self._locks[job_id] = asyncio.Lock()
         self._thermo[job_id] = thermo.ThermoBuffer()
-        if kind == "lmp" and self._running_lmp_count() >= MAX_CONCURRENT_LMP:
+        if kind == "lmp" and self._running_lmp_count(exclude_job_id=job_id) >= MAX_CONCURRENT_LMP:
             # 并发上限: 排队等前序任务完成 (失败/取消也会触发调度)
             ok = await self._transition(job_id, "queued", None)
             if ok:
-                self._pending.append((job, command))
+                job["status"] = "queued"  # 返回值与账本一致
+                self._pending.append((job, command, script_text))
                 await self._append_line(job_id,
                     f"[workbench] 已进入队列 (并发上限 {MAX_CONCURRENT_LMP}); 前序任务完成后自动启动")
                 return job
-        asyncio.create_task(self._run(job, command))
+        asyncio.create_task(self._run(job, command, script_text))
         return job
 
-    def _running_lmp_count(self) -> int:
-        return sum(1 for p in self._procs.values() if p.returncode is None)
+    def _running_lmp_count(self, exclude_job_id: str | None = None) -> int:
+        """store 计数 (running 状态的 lmp) — 进程注册有异步窗口, 记账才是地面真相。
+        exclude_job_id: 排除自己 (start 时自己已以 running 入库, 不算占位)。"""
+        return sum(1 for j in store.list_jobs(limit=100)
+                   if j["kind"] == "lmp" and j["status"] == "running"
+                   and j["id"] != exclude_job_id)
 
     def _build_command(self, project: dict, script: str, kind: str, job_id: str,
                        omp_threads: int = 8) -> list[str]:
@@ -152,22 +168,31 @@ class JobManager:
         # python: 分析/生成脚本, 输出约定为脚本同目录 (与 docs/workflows.md 一致)
         return ["uv", "run", "python", os.path.join(ROOT, project["dir"], script)]
 
-    async def _stage_lmp(self, job: dict, project: dict) -> None:
+    async def _stage_lmp(self, job: dict, project: dict,
+                         skip_script: bool = False) -> None:
         """宿主机侧暂存: 脚本 + 依赖闭包 + 顶层 *.data → 工作区 (契约见 common/runner.py)。"""
         missing = await asyncio.to_thread(
             runner.stage_dependencies,
             os.path.join(ROOT, project["dir"]), job["script"], job["workspace"],
+            skip_script,
         )
         for ref in missing:
             await self._append_line(
                 job["id"], f"[workbench] 警告: 脚本引用的依赖不存在, 未暂存: {ref}")
 
-    async def _run(self, job: dict, command: list[str]) -> None:
+    async def _run(self, job: dict, command: list[str], script_text: str | None = None) -> None:
         job_id = job["id"]
         project = get_project(job["project_id"])
         try:
             if job["kind"] == "lmp":
-                await self._stage_lmp(job, project)
+                # script_text (扫描/续跑): 源脚本由文本写入 (项目目录无需存在),
+                # 但依赖 (*.data / include 闭包) 照常暂存 — 扫描脚本仍需 read_data 的 system.data;
+                # 续跑脚本经容器内绝对路径跨工作区引用源检查点
+                await self._stage_lmp(job, project, skip_script=script_text is not None)
+                if script_text is not None:
+                    script_path = os.path.join(job["workspace"], job["script"])
+                    await asyncio.to_thread(
+                        lambda: open(script_path, "w", encoding="utf-8", newline=chr(10)).write(script_text))
                 await self._append_line(
                     job_id, f"[workbench] 已暂存至工作区: {job['workspace']}")
             if job["kind"] == "lmp":
@@ -189,39 +214,73 @@ class JobManager:
 
         self._procs[job_id] = proc
         await self._broadcast(job_id, {"type": "status", "status": "running"})
-        assert proc.stdout is not None
-        async for raw in proc.stdout:
-            line = raw.decode("utf-8", "replace").rstrip("\r\n")
-            await self._append_line(job_id, line)
+        code: int | None = None
+        try:
+            assert proc.stdout is not None
+            async for raw in proc.stdout:
+                line = raw.decode("utf-8", "replace").rstrip("\r\n")
+                await self._append_line(job_id, line)
+            code = await proc.wait()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # 日志 IO/解码异常击穿会卡死队列 — 进程必须收尸
+            await self._append_line(job_id, f"[workbench] 执行循环异常: {e}")
+            try:
+                proc.terminate()
+                code = await asyncio.wait_for(proc.wait(), timeout=10)
+            except Exception:
+                code = -1
 
-        code = await proc.wait()
         self._procs.pop(job_id, None)
         final = "completed" if code == 0 else "failed"
         if await self._transition(job_id, final, code):
             note = "任务完成" if final == "completed" else f"任务失败 (exit code {code})"
             await self._append_line(job_id, f"[workbench] {note}")
         if job["kind"] == "build" and final == "completed":
-            await asyncio.to_thread(self._record_built_sha, project)
+            try:
+                await asyncio.to_thread(self._record_built_sha, project)
+            except Exception as e:
+                logging.warning("记录 built_system_sha 失败: %s", e)
         if job["kind"] == "lmp":
             self._dispatch()
 
     def _dispatch(self) -> None:
         """并发空位时启动下一个排队任务 (失败/取消完成均会触发)。"""
         while self._pending and self._running_lmp_count() < MAX_CONCURRENT_LMP:
-            job, command = self._pending.popleft()
-            if store.get(job["id"], ) is None:
-                continue  # 已被删除
+            try:
+                job, command, script_text = self._pending.popleft()
+            except IndexError:
+                continue
             cur = store.get(job["id"])
-            if cur and cur["status"] != "queued":
-                continue  # 已取消/中断
+            if cur is None or cur["status"] != "queued":
+                continue  # 已删除/取消
             log.info("队列调度: 启动排队任务 %s", job["id"])
-            asyncio.get_running_loop().create_task(self._promote(job, command))
+            asyncio.get_running_loop().create_task(self._promote(job, command, script_text))
             break
 
-    async def _promote(self, job: dict, command: list[str]) -> None:
+    async def queue_sweeper(self) -> None:
+        """低频自愈调度: 兜住工作台进程之外的事件 (CLI 任务完成释放并发槽等) —
+        CLI 在独立进程结束, 本进程无人触发 _dispatch, 靠此兜底推进队列。"""
+        while True:
+            await asyncio.sleep(10)
+            try:
+                if self._pending:
+                    self._dispatch()
+            except Exception as e:
+                log.warning("队列 sweeper 异常: %s", e)
+
+    def cleanup_memory(self, job_id: str) -> None:
+        """任务删除后回收管理器内存态 (防长期运行泄漏)。"""
+        self._tails.pop(job_id, None)
+        self._locks.pop(job_id, None)
+        self._thermo.pop(job_id, None)
+        self._procs.pop(job_id, None)
+        self._canceled.discard(job_id)
+
+    async def _promote(self, job: dict, command: list[str], script_text: str | None = None) -> None:
         if await self._transition(job["id"], "running", None):
             await self._append_line(job["id"], "[workbench] 队列轮到, 开始执行")
-            asyncio.create_task(self._run(job, command))
+            asyncio.create_task(self._run(job, command, script_text))
 
     @staticmethod
     def _record_built_sha(project: dict) -> None:
@@ -263,8 +322,33 @@ class JobManager:
 
         容器内进程可能已消失 (干净退出) 或仍在计算 (残留) — 两种情况都交代清楚;
         interrupted 任务可从列表取消 (三段式精确 kill 清理残留进程)。
+        排队中的任务 (queued, 无进程) 重新入队继续调度。
         """
         orphans = [j for j in store.list_jobs(limit=500) if j["status"] == "running"]
+        queued = [j for j in store.list_jobs(limit=500) if j["status"] == "queued"]
+        for j in queued:
+            # 重启后排队意图仍在: 保持 queued 并重新入队。
+            # script_text 任务 (扫描/续跑) 从 sidecar 读回; 丢失则取消 —
+            # 静默跑基准脚本 = 错误科学, 宁可显式失败
+            project = get_project(j["project_id"])
+            if project is None:
+                await self._transition(j["id"], "canceled", None)
+                continue
+            script = j["script"] if j["kind"] != "build" else "-m common.build"
+            command = self._build_command(project, script, j["kind"], j["id"], j["omp_threads"])
+            script_text: str | None = None
+            sidecar = Path(JOBS_LOG_DIR, f"{j['id']}.script")
+            if sidecar.is_file():
+                script_text = sidecar.read_text(encoding="utf-8")
+            elif j["kind"] == "lmp":
+                await self._transition(j["id"], "canceled", None)
+                await self._append_line(j["id"],
+                    "[workbench] 重启后脚本副本丢失, 任务已取消 — 请重新发起扫描/续跑")
+                continue
+            self._pending.append((j, command, script_text))
+        if queued:
+            log.info("队列恢复: %d 个 queued 任务重新入队", len(queued))
+            self._dispatch()  # 启动即调度 (否则无人触发)
         recovered = 0
         for job in orphans:
             pids = await self._container_pids(job["id"]) if job["kind"] == "lmp" else []
@@ -285,7 +369,7 @@ class JobManager:
         if not await self._transition(job_id, "canceled", None):
             return store.get(job_id)  # 非运行态: 幂等返回
         self._pending = collections.deque(
-            (j, c) for j, c in self._pending if j["id"] != job_id)
+            (j, c, s) for j, c, s in self._pending if j["id"] != job_id)
         self._canceled.add(job_id)
         proc = self._procs.get(job_id)
         if proc is not None and proc.returncode is None:
@@ -345,8 +429,11 @@ class JobManager:
         job = store.get(job_id)
         if job is None:
             return
-        with open(job["log_path"], "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        try:
+            with open(job["log_path"], "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except OSError as e:  # 磁盘满/文件被占 — 日志落盘失败不击穿执行循环
+            logging.warning("日志写入失败 (%s): %s", job["log_path"], e)
         tail = self._tails.get(job_id)
         if tail is not None:
             tail.append(line)

@@ -8,7 +8,7 @@
 # 模板: nvt_production — 最小化 + NVT 平衡 + 生产 (9 板块规范)
 # 体系 profile: solution | 水模型: SPCE
 # 温度: 320.0 K | 时间步: 2.0 fs
-# 平衡: 100000 步 | 生产: 20000 步
+# 平衡: 5000 步 | 生产: 2000 步
 # 板块结构规范见 docs/workflows.md — 每个板块头说明其作用
 
 # ============================================================
@@ -106,6 +106,10 @@ neighbor                2.0 bin
 thermo_modify           lost ignore flush yes
 # thermo_modify — lost ignore 忽略原子漂出警告; flush yes 实时刷新日志
 
+thermo_style           custom step temp press density etotal
+# thermo_style — 输出列含 density: 工作台平衡判据需要密度+总能量做末窗口漂移检验
+#               (「热力学曲线」卡据此显示平衡质量胶囊)
+
 thermo                  2000
 # thermo 2000 — 平衡段热力学输出频率 (每 2000 步)
 
@@ -145,8 +149,8 @@ fix                     fnvt mobile nvt temp 320.0 320.0 100.0
 timestep                2.0
 # timestep — 2.0 fs (SHAKE 刚性水下的标准步长)
 
-run                     100000
-# run 100000 — NVT 平衡, 时长 200.0 ps
+run                     5000
+# run 5000 — NVT 平衡, 时长 10.0 ps
 
 print "=== NVT DONE ==="
 
@@ -156,16 +160,22 @@ print "=== NVT DONE ==="
 
 print "=== PRODUCTION ==="
 
-dump                    dmp1 all custom 100 prod.lammpstrj id type x y z
-# dump — 每 100 步输出一帧轨迹 prod.lammpstrj (VMD/OVITO 可读)
-#   总帧数 ≈ 20000 / 100 = 200 帧
-#   物理时长: 40.0 ps
+dump                    dmp1 all custom 50 prod.lammpstrj id type x y z
+# dump — 每 50 步输出一帧轨迹 prod.lammpstrj (VMD/OVITO 可读)
+#   总帧数 ≈ 2000 / 50 = 40 帧
+#   物理时长: 4.0 ps
+
+thermo_style           custom step temp press density etotal
+# thermo_style — 同上, 生产段输出含 density
 
 thermo                  5000
 # thermo 5000 — 生产段热力学输出频率
 
-run                     20000
-# run 20000 — 生产模拟
+run                     2000
+# run 2000 — 生产模拟
+
+write_restart           checkpoint_prod.restart
+# write_restart — 检查点: 生产完成态 (工作台「检查点续跑」的起点)
 
 print "=== PRODUCTION DONE ==="
 # 日志出现此行 = 模拟正常结束

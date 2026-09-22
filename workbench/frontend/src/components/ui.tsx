@@ -11,8 +11,23 @@ export function StatusDot({ status }: { status: JobStatus | "ok" | "bad" }) {
 export function StatusChip({ status }: { status: JobStatus }) {
   const meta = statusMeta[status];
   return (
-    <span className="status-chip">
-      <StatusDot status={status} />
+    <span className={`status-chip tone-${meta.tone}`}>
+      <span className={status === "running" ? "status-glyph live" : "status-glyph"}>
+        {meta.glyph}
+      </span>
+      {meta.label}
+    </span>
+  );
+}
+
+/** 语义色徽章 (Cal.com 借鉴): 形状符号 + 文字 + 颜色三通道 (色觉友好);
+ *  running=accent蓝, queued/canceled=neutral灰, completed=ok绿, failed=err红,
+ *  interrupted=info蓝 */
+export function StatusBadge({ status }: { status: JobStatus }) {
+  const meta = statusMeta[status];
+  return (
+    <span className={`badge-soft ${meta.tone}`}>
+      <span className="status-glyph">{meta.glyph}</span>
       {meta.label}
     </span>
   );

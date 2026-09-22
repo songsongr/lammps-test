@@ -1,6 +1,6 @@
 /** 后端 API 客户端与类型定义 */
 
-export type JobStatus = "running" | "completed" | "failed" | "canceled" | "interrupted";
+export type JobStatus = "queued" | "running" | "completed" | "failed" | "canceled" | "interrupted";
 export type JobKind = "lmp" | "python" | "build";
 
 export interface Job {
@@ -20,6 +20,10 @@ export interface Job {
   workspace: string | null;
   /** OMP 线程数 (LAMMPS 任务) */
   omp_threads: number;
+  /** 来源: workbench (默认) | cli (终端 runner) */
+  source: "workbench" | "cli";
+  /** 参数扫描批次 id */
+  batch: string | null;
 }
 
 export interface JobDetail extends Job {
@@ -86,11 +90,34 @@ export interface JobFingerprint {
 }
 
 /** 轨迹统计在线分析结果 */
+export interface FrameAtom { id: number; type: number; x: number; y: number; z: number }
 export interface TrajectoryAnalysis {
   summary: { frames: number; atoms: number; types: Record<string, number> };
-  z_profile: { type: string; bins: { z: number; freq: number }[] }[];
-  msd: { type: string; points: { step: number; lag: number; value: number }[] }[];
+  z_profile: { type: string; label?: string; bins: { z: number; freq: number }[] }[];
+  msd: {
+    type: string;
+    label?: string;
+    points: { step: number; lag: number; value: number }[];
+    /** MSD 末窗线性拟合: 斜率 Å²/step (物理换算需 dt) + R² + 拟合窗口 */
+    diffusion?: { slope_a2_per_step: number; r2: number; window: [number, number] } | null;
+  }[];
+  frames_3d?: {
+    first: FrameAtom[];
+    last: FrameAtom[];
+    timestep_first: number;
+    timestep_last: number;
+  };
 }
+
+export interface MsdCompareEntry {
+  id: string;
+  script?: string;
+  project_name?: string;
+  status: "done" | "idle" | "running" | "none" | "error" | "missing";
+  note?: string;
+  msd?: TrajectoryAnalysis["msd"][number];
+}
+export interface MsdComparison { series: MsdCompareEntry[] }
 
 /** lint 结果 (errors 阻止发车, warnings 放行提示) */
 export interface LintResult {
@@ -141,6 +168,21 @@ export interface Project {
   /** 手动直建且缺 project.json (兜底按目录名注册) */
   unregistered?: boolean;
   scripts: ProjectScript[];
+}
+
+/** 迁移暂存区条目 (projects/_inbox/<id>/, 手动创建指南抽屉「待入库清单」用) */
+export interface InboxItem {
+  id: string; // 暂存目录名
+  name: string; // manifest.name 或目录名
+  description: string;
+  has_manifest: boolean;
+  has_migration_manifest: boolean; // 文件映射转换说明
+  files: { name: string; size: number }[];
+  file_count: number;
+  total_bytes: number;
+  target_id: string; // 入库后的项目 id
+  target_conflict: boolean; // 目标 id 已被占用
+  mtime: string;
 }
 
 export interface SchemaField {
@@ -199,6 +241,54 @@ export interface Health {
   time: string;
   python: string;
   docker: DockerInfo;
+  /** v1.8.5: 当前执行后端摘要 (LocalDocker / RemoteHPC 等) */
+  backend: BackendSummary;
+}
+
+/** v1.8.5: 执行后端摘要 (仪表盘状态卡 / 配置抽屉共用) */
+export interface BackendSummary {
+  type: string;
+  name: string;
+  status: string;
+  action_needed: string;
+  available: boolean;
+}
+
+/** v1.8.5: 后端配置项 (frontend 抽屉编辑用) */
+export interface BackendConfig {
+  type: string;
+  ssh_host?: string;
+  ssh_user?: string;
+  ssh_key_path?: string;
+  ssh_port?: number;
+  hpc_workdir?: string;
+  hpc_sbatch_template?: string;
+  hpc_modules?: string[];
+}
+
+/** v1.8.5: 后端详细探测结果 (含 details / error 等冗余字段) */
+export interface BackendInfo extends BackendSummary {
+  error?: string | null;
+  details?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** v1.8.5: 已注册 backend 列表项 (供下拉) */
+export interface BackendListItem {
+  type: string;
+  name: string;
+  status: string;
+  action_needed: string;
+  available: boolean;
+  error?: string;
+}
+
+/** v1.8.5: 一键启动结果 (与 BackendStartResult 对齐) */
+export interface BackendStartResult {
+  ok: boolean;
+  stage: string;
+  message: string;
+  hint_url: string | null;
 }
 
 export type WsMessage =
@@ -237,6 +327,32 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => http<Health>("/api/health"),
+  /** 容器资源监测: CPU% / 内存 / 数据目录大小 + 5 分钟趋势 ring buffer */
+  dockerMetrics: () => http<{
+    current: { cpu_pct: number; mem_used_bytes: number; mem_pct: number } | null;
+    history: { t: number; cpu_pct: number; mem_used_bytes: number; mem_pct: number }[];
+    data_dir_size_bytes: number | null;
+    data_dir_path: string;
+  }>("/api/docker/metrics"),
+  /** 一键启动 lammpsd 容器 (容器停止时) */
+  dockerStart: () => http<{ ok: boolean; message: string; status: string | null; stage: string; hint_url: string | null }>(
+    "/api/docker/start", { method: "POST" }
+  ),
+  /** 执行后端: 当前配置 + 状态 */
+  backendGet: () => http<{ config_path: string; config: BackendConfig; info: BackendInfo }>(
+    "/api/backend"),
+  /** 执行后端: 已注册列表 (Local Docker / Remote HPC 等) */
+  backendList: () => http<{ backends: BackendListItem[] }>("/api/backend/list"),
+  /** 执行后端: 切换并持久化 */
+  backendPut: (cfg: BackendConfig) =>
+    http<{ config: BackendConfig; info: BackendInfo }>("/api/backend", {
+      method: "PUT", body: JSON.stringify(cfg),
+    }),
+  /** 执行后端: 连通性测试 (不持久化) */
+  backendTest: (cfg?: Partial<BackendConfig>) =>
+    http<{ info: BackendInfo }>("/api/backend/test", {
+      method: "POST", body: JSON.stringify(cfg ?? {}),
+    }),
   projects: () => http<Project[]>("/api/projects"),
   jobs: () => http<Job[]>("/api/jobs"),
   job: (id: string) => http<JobDetail>(`/api/jobs/${id}`),
@@ -259,6 +375,26 @@ export const api = {
     http<{ path: string; size: number; text: string }>(
       `/api/jobs/${id}/files/content?path=${encodeURIComponent(path)}`,
     ),
+  /** 参数扫描: 对每个值渲染脚本副本并批量发车 (进队列) */
+  scanProject: (id: string, paramKey: string, values: number[], ompThreads: number) =>
+    http<{ batch: string; param: string; values: number[]; jobs: { id: string; value: number; status: string }[] }>(
+      `/api/projects/${id}/scan`,
+      { method: "POST", body: JSON.stringify({ param_key: paramKey, values, omp_threads: ompThreads }) },
+    ),
+  /** 多任务 thermo 对比数据 */
+  compareJobs: (ids: string[]) =>
+    http<{ series: { id: string; script: string; project_name: string; status: string; batch: string | null; thermo: ThermoData }[] }>(
+      `/api/jobs/compare?ids=${ids.join(",")}`),
+  /** 多任务全原子 MSD 对比，使用现有轨迹分析缓存 */
+  compareMsd: (ids: string[]) =>
+    http<MsdComparison>(`/api/jobs/compare-msd?ids=${encodeURIComponent(ids.join(","))}`),
+  /** 任务工作区检查点列表 */
+  getRestarts: (id: string) =>
+    http<{ restarts: { name: string; size: number; mtime: number }[] }>(`/api/jobs/${id}/restarts`),
+  /** 从最新检查点续跑 — 重载区分返回 */
+  resumeJob: (id: string, steps: number, ompThreads: number) =>
+    http<{ id: string; source_restart?: string }>(`/api/jobs/${id}/resume`,
+      { method: "POST", body: JSON.stringify({ steps, omp_threads: ompThreads }) }),
   /** 轨迹统计: 获取 (idle=待触发/running/done/error/none) */
   getAnalysis: (id: string) =>
     http<{ status: string; result?: TrajectoryAnalysis; note?: string; error?: string }>(
@@ -278,9 +414,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getSystem: (id: string) =>
-    http<{ config: Record<string, unknown>; errors: string[]; consistency: SystemConsistency }>(
-      `/api/projects/${id}/system`,
-    ),
+    http<{
+      config: Record<string, unknown>;
+      errors: string[];
+      consistency: SystemConsistency;
+      meta: { method_id: string | null; method_params: Record<string, number | boolean> };
+    }>(`/api/projects/${id}/system`),
   putSystem: (id: string, config: Record<string, unknown>) =>
     http<{ saved: boolean; note: string }>(`/api/projects/${id}/system`, {
       method: "PUT",
@@ -302,6 +441,16 @@ export const api = {
   /** 删除用户自建项目 (projects/ 目录) */
   deleteProject: (id: string) =>
     http<{ deleted: boolean; id: string }>(`/api/projects/${id}`, { method: "DELETE" }),
+  /** 迁移暂存区: 待入库清单 (手动创建指南抽屉) */
+  projectsInbox: () =>
+    http<{ dir: string; items: InboxItem[] }>("/api/projects/inbox"),
+  /** 确认入库: 暂存目录移动为 projects/<target_id>/ 并自动注册 */
+  confirmInbox: (id: string) =>
+    http<{ confirmed: boolean; id: string; dir: string; manifest_backfilled: boolean }>(
+      `/api/projects/inbox/${id}/confirm`, { method: "POST" }),
+  /** 丢弃暂存副本 (仅删工作台内副本, 用户旧路径文件不受影响) */
+  discardInbox: (id: string) =>
+    http<{ discarded: boolean; id: string }>(`/api/projects/inbox/${id}`, { method: "DELETE" }),
   /** 本地工具探测 (VMD / Vesta) — 仪表盘浮窗用 */
   localToolsDetect: () => http<LocalToolsDetect>("/api/local-tools/detect"),
   /** 手动配置工具路径 (path 传空字符串清除) */
@@ -313,11 +462,22 @@ export const api = {
   localToolsInstallHint: (tool: 'vmd' | 'vesta') =>
     http<{ tool: string; platform: string; url: string }>(
       `/api/local-tools/install-hint?tool=${tool}`),
-  /** 启动器: 返回 {filename, content}, 前端用 blob 下载 */
+  /** 启动器: 返回 {filename, content}, 前端用 blob 下载 (降级路径) */
   localToolLauncher: async (tool: 'vmd' | 'vesta', filePath: string): Promise<LauncherResult> => {
     const r = await http<LauncherResult>(
       `/api/local-tools/launcher?tool=${tool}&path=${encodeURIComponent(filePath)}`);
     return r;
+  },
+  /** 真一键: 后端 spawn 本机 .exe; 不可用时返回 {ok:false, fallback:"launcher", content/filename} 供下载 */
+  openWithTool: async (tool: 'vmd' | 'vesta', filePath: string, autoConvertData = true) => {
+    return http<{
+      ok: boolean; spawned: boolean; pid?: string; path?: string;
+      fallback?: string; message?: string;
+      filename?: string; content?: string;
+    }>("/api/local-tools/open", {
+      method: "POST",
+      body: JSON.stringify({ tool, path: filePath, auto_convert_data: autoConvertData }),
+    });
   },
 
   /** 结束工作台后端进程 (受控退出; 409 = 有运行中任务被互锁) */

@@ -23,6 +23,16 @@
       ]
     },
     {
+      "signature": "Unknown keyword '.*' in thermo_style",
+      "hint": "thermo_style 关键字不被当前 LAMMPS 版本支持 (容器内为 2021.07): 例如 toteng 应写作 etotal (输出列名为 TotEng)。",
+      "severity": "high",
+      "can_resume": false,
+      "actions": [
+        "把 thermo_style 中的 toteng 改为 etotal",
+        "在 manual_md/ 检索该关键字确认版本支持"
+      ]
+    },
+    {
       "signature": "Lost atoms",
       "hint": "原子丢失: 常见原因为初始构型原子重叠、时间步过大或跳过了能量最小化; 检查体系生成与 minimize 设置。",
       "severity": "high",

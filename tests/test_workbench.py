@@ -387,6 +387,197 @@ class TestProjectRegistration:
         assert not ps["with-manifest"].get("unregistered")
 
 
+class TestProjectsInbox:
+    """历史研究迁移暂存区 (projects/_inbox/) API: 列表 / 确认入库 / 丢弃。"""
+
+    @pytest.fixture
+    def inbox_env(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        from workbench.backend.app import config as cfg_mod
+        from workbench.backend.app.main import app
+        from workbench.backend.app.routers import projects as projects_router
+
+        monkeypatch.setattr(cfg_mod, "USER_PROJECTS_DIR", str(tmp_path))
+        monkeypatch.setattr(projects_router, "USER_PROJECTS_DIR", str(tmp_path))
+        return TestClient(app), tmp_path
+
+    def _stage(self, tmp_path, inbox_id, files=None, manifest=None):
+        d = tmp_path / "_inbox" / inbox_id
+        d.mkdir(parents=True)
+        for name, content in (files or {}).items():
+            (d / name).write_text(content, encoding="utf-8")
+        if manifest is not None:
+            import json as _json
+            (d / "project.json").write_text(
+                _json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+        return d
+
+    def test_inbox_dir_never_registered_as_project(self, inbox_env):
+        from workbench.backend.app import config as cfg_mod
+
+        client, tmp_path = inbox_env
+        self._stage(tmp_path, "clay-2024", files={"run.lmp": "# x\n"})
+        ps = {p["id"] for p in cfg_mod.get_projects()}
+        assert "_inbox" not in ps and "clay-2024" not in ps
+
+    def test_list_reports_staged_entries(self, inbox_env):
+        client, tmp_path = inbox_env
+        self._stage(tmp_path, "clay-2024", files={"run.lmp": "# x\n", "analyze.py": "1\n"},
+                    manifest={"id": "clay-2024", "name": "黏土 2024", "description": "旧研究"})
+        (tmp_path / "_inbox" / "clay-2024" / "migration_manifest.md").write_text(
+            "| 原路径 | 新路径 |\n", encoding="utf-8")
+        self._stage(tmp_path, "bare-copy", files={"run.lmp": "# y\n"})
+
+        r = client.get("/api/projects/inbox")
+        assert r.status_code == 200
+        items = {i["id"]: i for i in r.json()["items"]}
+        full = items["clay-2024"]
+        assert full["name"] == "黏土 2024" and full["target_id"] == "clay-2024"
+        assert full["has_manifest"] is True and full["has_migration_manifest"] is True
+        assert full["file_count"] == 4 and full["target_conflict"] is False
+        assert items["bare-copy"]["has_manifest"] is False
+        assert items["bare-copy"]["target_id"] == "bare-copy"
+
+    def test_confirm_moves_and_registers(self, inbox_env):
+        client, tmp_path = inbox_env
+        self._stage(tmp_path, "clay-2024", files={"run.lmp": "# x\n"},
+                    manifest={"id": "clay-2024", "name": "黏土 2024", "description": "旧研究"})
+        r = client.post("/api/projects/inbox/clay-2024/confirm")
+        assert r.status_code == 201
+        assert r.json()["dir"] == "projects/clay-2024"
+        assert not (tmp_path / "_inbox" / "clay-2024").exists()
+        import json as _json
+        meta = _json.loads((tmp_path / "clay-2024" / "project.json").read_text(encoding="utf-8"))
+        assert meta["id"] == "clay-2024" and meta.get("migrated_at")
+
+        from workbench.backend.app import config as cfg_mod
+        ps = {p["id"] for p in cfg_mod.get_projects()}
+        assert "clay-2024" in ps
+
+    def test_confirm_backfills_minimal_manifest(self, inbox_env):
+        client, tmp_path = inbox_env
+        self._stage(tmp_path, "bare-copy", files={"run.lmp": "# y\n"})
+        r = client.post("/api/projects/inbox/bare-copy/confirm")
+        assert r.status_code == 201 and r.json()["manifest_backfilled"] is True
+        import json as _json
+        meta = _json.loads((tmp_path / "bare-copy" / "project.json").read_text(encoding="utf-8"))
+        assert meta["id"] == "bare-copy" and meta["name"] == "bare-copy"
+
+    def test_confirm_rejects_target_conflict(self, inbox_env):
+        client, tmp_path = inbox_env
+        existing = tmp_path / "foo"
+        existing.mkdir()
+        (existing / "project.json").write_text(
+            '{"id": "foo", "name": "已有项目", "description": ""}', encoding="utf-8")
+        self._stage(tmp_path, "foo", files={"run.lmp": "# x\n"})
+        r = client.get("/api/projects/inbox")
+        assert r.json()["items"][0]["target_conflict"] is True
+        r = client.post("/api/projects/inbox/foo/confirm")
+        assert r.status_code == 409
+        assert (tmp_path / "_inbox" / "foo" / "run.lmp").exists()  # 暂存副本原封不动
+
+    def test_discard_removes_staged_copy_only(self, inbox_env):
+        client, tmp_path = inbox_env
+        self._stage(tmp_path, "junk", files={"run.lmp": "# x\n"})
+        r = client.delete("/api/projects/inbox/junk")
+        assert r.status_code == 200 and r.json()["discarded"] is True
+        assert not (tmp_path / "_inbox" / "junk").exists()
+
+    def test_inbox_id_path_safety(self, inbox_env):
+        client, tmp_path = inbox_env
+        # URL 层 .. 会被归一化到不了 handler; 遍历防护在 handler 内直接验证
+        from workbench.backend.app.routers import projects as projects_router
+
+        for bad in ("..", "../escape", "a/b", ".hidden"):
+            with pytest.raises(Exception) as ei:
+                projects_router._inbox_dir_or_404(bad)
+            assert getattr(ei.value, "status_code", None) == 400
+        # HTTP 层: 段内非法字符 (首位 .) 与不存在 id
+        assert client.post("/api/projects/inbox/.hidden/confirm").status_code == 400
+        assert client.post("/api/projects/inbox/missing/confirm").status_code == 404
+        assert not (tmp_path.parent / "escape").exists()
+
+
+class TestProvenance:
+    """单任务溯源包 (roadmap #6): zip 内容完整性 + 内部字段剔除 + 缺失容错。"""
+
+    def _make_job(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "run.lmp").write_text("units real\nrun 0\n", encoding="utf-8")
+        (ws / "prod.lammpstrj").write_text("big trajectory\n", encoding="utf-8")
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / "system.json").write_text('{"profile": "clay_cif"}', encoding="utf-8")
+        (proj / "system.data").write_text("atoms\n", encoding="utf-8")
+        job = {
+            "id": "job123", "project_id": "proj", "project_name": "Proj",
+            "script": "run.lmp", "kind": "lmp", "status": "completed", "exit_code": 0,
+            "created_at": "2026-09-05T12:00:00", "finished_at": "2026-09-05T12:01:00",
+            "omp_threads": 8, "workspace": str(ws),
+            "fingerprint": '{"system_sha": "abc"}',
+            "_log_path": str(tmp_path / "internal.log"),
+        }
+        return job, ws, proj
+
+    def test_zip_contains_core_entries(self, tmp_path):
+        import io
+        import json as _json
+        import zipfile
+
+        from workbench.backend.app.provenance import build_provenance_zip
+
+        job, _ws, proj = self._make_job(tmp_path)
+        data, skipped = build_provenance_zip(job, str(proj), "LAMMPS log tail")
+        assert skipped == []
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        names = set(zf.namelist())
+        assert {"README.txt", "job.json", "fingerprint.json", "run.lmp",
+                "system.json", "system.data", "log_tail.txt"} <= names
+        assert "prod.lammpstrj" not in names  # 大体积可再生文件不入包
+        job_back = _json.loads(zf.read("job.json").decode("utf-8"))
+        assert "_log_path" not in job_back and job_back["id"] == "job123"
+        assert _json.loads(zf.read("fingerprint.json").decode("utf-8"))["system_sha"] == "abc"
+
+    def test_missing_pieces_do_not_break_export(self, tmp_path):
+        import io
+        import zipfile
+
+        from workbench.backend.app.provenance import build_provenance_zip
+
+        job = {"id": "x", "project_id": "ghost", "script": "run.lmp",
+               "kind": "lmp", "status": "failed", "workspace": None, "fingerprint": None}
+        data, skipped = build_provenance_zip(job, None, None)
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        assert "README.txt" in zf.namelist()
+        assert any("run.lmp" in s for s in skipped)
+        assert any("system.json" in s for s in skipped)
+
+
+class TestLocalDockerBackend:
+    """/data 挂载检测 (v1.8.8 实录: _default 单键 ImportError 曾静默跳过整个校验)"""
+
+    def test_default_missing_key_does_not_poison_others(self):
+        from common.backends.local_docker import _default
+
+        # config.py 不存在的 key → fallback, 且不影响存在的 key
+        assert _default("NOT_A_CONFIG_KEY", "fb") == "fb"
+        assert _default("CONTAINER_NAME", "x") == "lammpsd"
+        assert _default("LAMMPS_DATA_HOST_DIR", None) is not None
+
+    def test_parse_data_mount(self):
+        from common.backends.local_docker import _host_path_same, _parse_data_mount
+
+        out = "C:\\Users\\x\\data|/data;\n"
+        assert _parse_data_mount(out, "/data") == "C:\\Users\\x\\data"
+        assert _parse_data_mount(out, "/other") is None
+        assert _parse_data_mount("", "/data") is None
+        # Windows 大小写/分隔符不敏感
+        assert _host_path_same("C:/Users/X/Data", "c:\\users\\x\\data") is True
+        assert _host_path_same("C:/a", "C:/b") is False
+
+
 class TestLammpsLint:
     """发车前确定性 lint (占位符/必需板块/引用存在性/旧挂载残留)。"""
 
@@ -566,15 +757,14 @@ class TestLocalTools:
         assert "if exist" in r["content"]
         assert "pause" in r["content"]
 
-    def test_launcher_no_exe_still_generates(self):
-        # 缺 exe 时仍生成可读脚本, 用户配置失败时启动器自身会提示
+    def test_launcher_bad_exe_self_guard(self):
+        # 指向不存在的 exe 时仍生成可读脚本, 启动器自身 if exist + 提示兜底
         from workbench.backend.app.local_tools.detect import launcher
 
-        r = launcher("vmd", "/tmp/x.lammpstrj", exe_override=None)
-        assert r["filename"]  # 任意平台后缀
-        assert r["found"] is False
-        # 缺失时脚本应包含失败提示
-        assert "工具未找到" in r["content"] or "未检测到" in r["content"] or "未找到" in r["content"]
+        r = launcher("vmd", "/tmp/x.lammpstrj", exe_override="C:/nonexistent/vmd.exe")
+        assert r["filename"]
+        assert "if exist" in r["content"]
+        assert "工具未找到" in r["content"] and "C:/nonexistent/vmd.exe" in r["content"]
 
     def test_configure_persists_and_clears(self, tmp_path, monkeypatch):
         import json as _json
@@ -690,6 +880,26 @@ class TestTrajectoryAnalysis:
         assert abs(msd["1"][0]["value"] - 1.0) < 1e-9  # 位移 1.0 → MSD 1.0
         assert abs(msd["2"][0]["value"]) < 1e-9  # 静止 → MSD 0
         assert "all" in msd
+
+    def test_fit_diffusion_linear(self):
+        from common.traj_analysis import fit_diffusion
+
+        # 完美线性 MSD = 0.002 × step → 斜率 0.002, R²=1
+        pts = [{"step": s, "value": 0.002 * s} for s in range(0, 1000, 50)]
+        d = fit_diffusion(pts)
+        assert d is not None
+        assert abs(d["slope_a2_per_step"] - 0.002) < 1e-9
+        assert d["r2"] == 1.0
+        assert d["window"][1] == 950.0
+
+    def test_fit_diffusion_insufficient_points(self):
+        from common.traj_analysis import fit_diffusion
+
+        assert fit_diffusion([{"step": 0, "value": 0.0}]) is None
+        # 平坦 MSD (完全不动): D̂=0 是有效物理结果, R²=1 (完美预测常数)
+        pts = [{"step": s, "value": 1.0} for s in range(10)]
+        d = fit_diffusion(pts)
+        assert d is not None and d["slope_a2_per_step"] == 0.0 and d["r2"] == 1.0
 
 
 class TestFingerprint:

@@ -56,6 +56,13 @@ Python 类任务（`*.py`）本地运行：`uv run python <abs script>`，工作
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/health` | docker/容器/挂载状态（3s 缓存） |
+| GET | `/api/jobs/compare?ids=` | 多任务 thermo 叠加对比数据（≤6 个） |
+| GET | `/api/jobs/compare-msd?ids=` | 多任务全原子 MSD 对比（≤6 个，读取轨迹分析缓存并返回各任务状态） |
+| POST | `/api/jobs/{id}/analysis` / GET | 轨迹统计（z 分布/MSD/初末帧），后台线程+工作区缓存 |
+| GET | `/api/jobs/{id}/restarts` · POST `.../resume` | 检查点列表 / 从最新检查点续跑 |
+| POST | `/api/projects/{id}/scan` | 参数扫描：每值渲染脚本副本批量发车（batch 关联） |
+| GET | `/api/projects/{id}/system-data` | system.data 文本（3D 预览） |
+| GET | `/api/local-tools/detect` · POST `configure` · GET `launcher` | VMD/Vesta 探测/手动配置/一键启动器 |
 | POST | `/api/workbench/shutdown` | 受控退出后端进程；有运行中任务返回 409 互锁，退出前自动清理容器内孤儿 LAMMPS 进程 |
 | GET | `/api/projects` | 子项目与脚本列表（实时扫描；`unregistered` = 缺 manifest 的兜底注册目录） |
 | POST | `/api/jobs` | 发起任务 `{project_id, script, kind}` |

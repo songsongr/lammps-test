@@ -133,12 +133,14 @@ def build(cfg: dict, rng, project_dir: str | None = None) -> BuildOutput:
 
     new_atoms = list(super_atoms)
     next_id = max(a["id"] for a in super_atoms) + 1
+    oh_bond_pairs: list[tuple] = []  # (oh O id, ho id) — CLAYFF 羟基 O-H 键 (与水同键型)
     for oa in oh_oxygens:  # H 沿 +z 指向层间, 1.0 Å
         new_atoms.append({
             "id": next_id, "element": "H", "mol": 0,
             "type": tids["ho"], "charge": tmap[tids["ho"]]["charge"],
             "frac": (oa["frac"][0], oa["frac"][1], oa["frac"][2] + 1.0 / super_cell["c"]),
         })
+        oh_bond_pairs.append((oa["id"], next_id))
         next_id += 1
     atoms = new_atoms
 
@@ -226,9 +228,15 @@ def build(cfg: dict, rng, project_dir: str | None = None) -> BuildOutput:
 
     bonds: list[tuple] = []
     angles: list[tuple] = []
+    # 羟基 O-H 键 (CLAYFF: 与水同一谐振子键型 554.13 kcal/mol/A^2, r0=1.0)。
+    # 缺此键时 ho 是无约束点电荷 (eps=0), minimize 会库仑坍缩进 O (PE -> -1e17)。
+    hid = 1
+    for oid, ho_id in oh_bond_pairs:
+        bonds.append((hid, 1, oid, ho_id))
+        hid += 1
     for k, (wo, wh1, wh2) in enumerate(water_mols, start=1):
-        bonds.append((2 * k - 1, 1, wo["id"], wh1["id"]))
-        bonds.append((2 * k, 1, wo["id"], wh2["id"]))
+        bonds.append((hid + 2 * k - 2, 1, wo["id"], wh1["id"]))
+        bonds.append((hid + 2 * k - 1, 1, wo["id"], wh2["id"]))
         angles.append((k, 1, wh1["id"], wo["id"], wh2["id"]))
 
     for t in types:

@@ -27,6 +27,7 @@ import type { ReactNode } from "react";
 import {
   api,
   type CreateProjectRequest,
+  type InboxItem,
   type JobKind,
   type MethodTemplate,
   type Project,
@@ -37,6 +38,7 @@ import {
 } from "../api/client";
 import { KindChip } from "../components/ui";
 import { fmtSize } from "../utils";
+import { copyToClipboard } from "../utils/aiPrompt";
 
 const TINTS = ["var(--accent-weak)", "var(--teal-weak)", "var(--neutral-weak)"];
 const TINT_ICONS = ["var(--accent)", "var(--teal)", "var(--text-2)"];
@@ -269,7 +271,7 @@ export default function Projects({
         }}
       />
 
-      <ManualGuideDrawer open={guideOpen} onClose={() => setGuideOpen(false)} />
+      <ManualGuideDrawer open={guideOpen} onClose={() => setGuideOpen(false)} onChanged={load} />
     </div>
   );
 }
@@ -507,6 +509,29 @@ const GUIDE_MANIFEST = `{
   "description": "一句话描述研究体系"
 }`;
 
+/** 历史研究迁移用的标准版提示词 (带占位符注释) */
+const MIGRATION_PROMPT = `我的 LAMMPS 历史研究需要迁入本工作台, 完整文件都在:
+
+  <旧资料根目录绝对路径>           ← 必填: 例 D:\\\\research\\\\clay-md-2024 或 ~/work/strontium
+
+目录里大致有:                       ← 可选: 你记得的文件类型 (帮助 agent 识别)
+  - LAMMPS 输入脚本 (run.lmp / in.* 等)
+  - system.data / *.data (体系数据)
+  - Python 分析脚本 (analyze.py / plot_*.py 等)
+  - 轨迹 / 日志 (prod.lammpstrj / log.lammps 等)
+  - 散落的输出 (xlsx / png / csv / txt 等)
+
+请按本工作台规则完成以下工作:
+  1. 扫描旧目录, 分类列出所有文件 (不要读大轨迹/日志全文)
+  2. 按角色归类 (run / analyze / system_data / artifact) 并识别研究主题
+  3. 在 projects/_inbox/<project_id>/ 下建立结构化副本:
+     - project.json (id / name / description)
+     - run.lmp / analyze.py 等 (按角色复制)
+     - README.md (引用映射清单)
+     - migration_manifest.md (逐条 原路径 → 新路径 → 角色 → 备注)
+  4. 不要修改我原路径的任何文件, 工作台内副本可自由改
+  5. 完成后告诉我待入库项目 id, 我在抽屉的「待入库清单」里确认`;
+
 const GUIDE_TREE = `lammps-test/                     ← 仓库根
 ├─ projects/                     ← 手动项目放这里 (文件夹即项目)
 │  └─ my-tensile/                ← 刷新页面自动注册, 零重启
@@ -537,13 +562,150 @@ function GuideItem({ k, children }: { k: string; children: ReactNode }) {
 }
 
 /** 手动创建项目指南: 文件系统直建目录的规范与平台自动行为 (与 docs/workflows.md 同源) */
-function ManualGuideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+function ManualGuideDrawer({
+  open,
+  onClose,
+  onChanged,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** 入库/丢弃后通知父级刷新项目列表 */
+  onChanged?: () => void;
+}) {
+  const [inbox, setInbox] = useState<InboxItem[] | null>(null);
+  const [inboxError, setInboxError] = useState<string | null>(null);
+  const [inboxBusy, setInboxBusy] = useState<Set<string>>(new Set());
+
+  const loadInbox = useCallback(() => {
+    api
+      .projectsInbox()
+      .then((r) => {
+        setInbox(r.items);
+        setInboxError(null);
+      })
+      .catch((e) => setInboxError(e instanceof Error ? e.message : String(e)));
+  }, []);
+
+  useEffect(() => {
+    if (open) loadInbox();
+  }, [open, loadInbox]);
+
+  const setItemBusy = (id: string, busy: boolean) => {
+    setInboxBusy((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const confirmIn = async (item: InboxItem) => {
+    setItemBusy(item.id, true);
+    try {
+      const r = await api.confirmInbox(item.id);
+      message.success(`已入库 ${r.id} → ${r.dir}${r.manifest_backfilled ? " (自动补最小 manifest)" : ""}`);
+      loadInbox();
+      onChanged?.();
+    } catch (e) {
+      message.error(`入库失败: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setItemBusy(item.id, false);
+    }
+  };
+
+  const discardStaged = async (item: InboxItem) => {
+    setItemBusy(item.id, true);
+    try {
+      await api.discardInbox(item.id);
+      message.success("已丢弃暂存副本 (你的旧路径文件不受影响)");
+      loadInbox();
+    } catch (e) {
+      message.error(`丢弃失败: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setItemBusy(item.id, false);
+    }
+  };
+
+  const copyPrompt = async (text: string, label: string) => {
+    try {
+      await copyToClipboard(text);
+      message.success(`${label}已复制到剪贴板`);
+    } catch {
+      message.error("复制失败, 请手动选择文本复制");
+    }
+  };
+
   return (
     <Drawer title="手动创建项目指南" width={600} open={open} onClose={onClose}>
       <Typography.Paragraph type="secondary" style={{ fontSize: 12.6, marginTop: 0 }}>
         向导适合从模板起步; 任意体系都可以直接在文件系统里建目录、写脚本 — 平台按约定自动发现,
         无需注册代码、无需重启。
       </Typography.Paragraph>
+
+      <GuideSection title="0. 从历史散落研究迁移进来">
+        <div style={{ fontSize: 12.6, color: "var(--text-1)", lineHeight: 1.75, marginBottom: 10 }}>
+          适用: 你之前跑过 LAMMPS, 文件散落在自己电脑某处 (可能根本没接触过本工作台),
+          现在想用本工作台继续推进。
+        </div>
+        <GuideItem k="你要做的事">
+          <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.85 }}>
+            <li>复制下方「标准版提示词」, 按你自己的情况填实占位符</li>
+            <li>把填好的提示词 + 旧资料路径告诉 agent (我)</li>
+            <li>agent 会扫描 → 识别 → 结构化迁移, 并给你一份映射清单待你确认</li>
+          </ol>
+        </GuideItem>
+        <GuideItem k="硬约束">
+          你的旧路径文件 <Typography.Text strong>不会被修改</Typography.Text>;
+          agent 只读取、识别、复制副本到本工作台空间。副本可以自由改动。
+        </GuideItem>
+        <GuideItem k="迁移去向">
+          产物先到 <Typography.Text code>projects/_inbox/&lt;id&gt;/</Typography.Text>{" "}
+          (暂存, 不入库), 抽屉底部的「待入库清单」会列出;
+          你点「确认入库」后才正式注册到项目库, 与新建项目走同一发现机制。
+        </GuideItem>
+        <div style={{ marginTop: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 6,
+            }}
+          >
+            <span style={{ fontWeight: 600, fontSize: 12.6, color: "var(--text-1)" }}>
+              📋 标准版提示词 (可复制)
+            </span>
+            <Typography.Paragraph
+              copyable={{ text: MIGRATION_PROMPT, tooltips: ["复制模板", "已复制"] }}
+              style={{ margin: 0 }}
+            >
+              <Button size="small" type="primary" ghost onClick={() => copyPrompt(MIGRATION_PROMPT, "迁移提示词模板")}>
+                复制模板
+              </Button>
+            </Typography.Paragraph>
+          </div>
+          <pre
+            style={{
+              margin: 0,
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: "var(--neutral-weak)",
+              border: "1px dashed var(--border)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 11.6,
+              lineHeight: 1.75,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {MIGRATION_PROMPT}
+          </pre>
+          <div style={{ fontSize: 11.8, color: "var(--text-2)", marginTop: 7, lineHeight: 1.7 }}>
+            填好后发给 agent 即可。agent 完成扫描后会先告诉你扫描到的文件清单,
+            再开始复制 — 你可以随时叫停。
+          </div>
+        </div>
+      </GuideSection>
 
       <GuideSection title="① 目录放在哪里">
         <pre
@@ -623,6 +785,113 @@ function ManualGuideDrawer({ open, onClose }: { open: boolean; onClose: () => vo
           (曲线/失败解析请改从工作台发起, 或关注后续版本)。体系构建类手动命令:{" "}
           <Typography.Text code>uv run python -m common.build &lt;项目目录&gt;</Typography.Text>。
         </GuideItem>
+      </GuideSection>
+
+      <GuideSection title="⑤ 待入库清单 (迁移暂存区)">
+        <div style={{ fontSize: 12.3, color: "var(--text-2)", marginBottom: 8, lineHeight: 1.7 }}>
+          agent 按「0.」的提示词迁移的历史研究会先暂存在{" "}
+          <Typography.Text code>projects/_inbox/&lt;id&gt;/</Typography.Text>, 审阅后逐条入库;
+          暂存产物不会出现在项目卡片列表。
+        </div>
+        {inbox === null && !inboxError ? (
+          <Spin size="small" />
+        ) : inboxError ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0 2px" }}>
+            <span style={{ fontSize: 12.3, color: "var(--err)", lineHeight: 1.6 }}>
+              ⚠ 待入库清单加载失败: {inboxError}
+            </span>
+            <Button size="small" onClick={loadInbox}>
+              重试
+            </Button>
+          </div>
+        ) : inbox && inbox.length === 0 ? (
+          <div style={{ fontSize: 12.3, color: "var(--text-3)", padding: "6px 0 2px" }}>
+            暂无待入库迁移。
+          </div>
+        ) : (
+          <List
+            size="small"
+            dataSource={inbox ?? []}
+            renderItem={(item) => (
+              <List.Item
+                style={{
+                  display: "block",
+                  padding: "10px 12px",
+                  marginBottom: 8,
+                  border: "1px solid var(--border)",
+                  borderRadius: 10,
+                  background: "var(--neutral-weak)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 600, fontSize: 12.8, color: "var(--text-1)" }}>
+                    {item.name}
+                  </span>
+                  <Typography.Text code style={{ fontSize: 11.4 }}>
+                    {item.target_id}
+                  </Typography.Text>
+                  <span style={{ fontSize: 11.6, color: "var(--text-2)" }}>
+                    {item.file_count} 个文件 · {fmtSize(item.total_bytes)}
+                  </span>
+                </div>
+                {item.description && (
+                  <div style={{ fontSize: 11.8, color: "var(--text-2)", marginTop: 3, lineHeight: 1.6 }}>
+                    {item.description}
+                  </div>
+                )}
+                <div style={{ fontSize: 11.4, marginTop: 5, lineHeight: 1.8 }}>
+                  {item.has_manifest ? (
+                    <span style={{ color: "var(--text-2)" }}>✓ project.json</span>
+                  ) : (
+                    <span style={{ color: "var(--text-2)" }}>缺 project.json (确认时自动补最小 manifest)</span>
+                  )}
+                  {" · "}
+                  {item.has_migration_manifest ? (
+                    <span style={{ color: "var(--text-2)" }}>✓ 映射说明</span>
+                  ) : (
+                    <span style={{ color: "var(--text-2)" }}>缺 migration_manifest.md</span>
+                  )}
+                  {item.target_conflict && (
+                    <span style={{ color: "var(--err)", marginLeft: 6 }}>
+                      ⚠ 目标 id 已被占用, 不可入库
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <Popconfirm
+                    title={`确认入库为 projects/${item.target_id}/?`}
+                    description="目录将移动到项目库并自动注册, 与新建项目同一机制。"
+                    okText="确认入库"
+                    cancelText="取消"
+                    disabled={item.target_conflict}
+                    onConfirm={() => confirmIn(item)}
+                  >
+                    <Button
+                      size="small"
+                      type="primary"
+                      disabled={item.target_conflict}
+                      loading={inboxBusy.has(item.id)}
+                    >
+                      确认入库
+                    </Button>
+                  </Popconfirm>
+                  <Popconfirm
+                    title="丢弃这份暂存副本?"
+                    description="仅删除工作台内 _inbox 副本; 你的旧路径文件不受影响。"
+                    okText="丢弃"
+                    okButtonProps={{ danger: true }}
+                    cancelText="取消"
+                    onConfirm={() => discardStaged(item)}
+                  >
+                    <Button size="small" danger loading={inboxBusy.has(item.id)}>
+                      丢弃
+                    </Button>
+                  </Popconfirm>
+                </div>
+              </List.Item>
+            )}
+          />
+        )}
       </GuideSection>
     </Drawer>
   );

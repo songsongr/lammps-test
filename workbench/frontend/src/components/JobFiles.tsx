@@ -5,15 +5,12 @@ import { message } from "antd";
 import { useEffect, useState } from "react";
 import { api, type WorkspaceFile } from "../api/client";
 import { fmtSize } from "../utils";
+import { supports } from "../utils/localToolsCompat";
 
 const PREVIEWABLE_EXT = new Set([
   ".log", ".txt", ".dat", ".lmp", ".in", ".mod", ".data", ".py",
   ".json", ".yaml", ".yml", ".csv", ".md",
 ]);
-
-// 文件扩展 → 推荐的本地工具
-const VMD_EXTS = new Set([".lammpstrj", ".dump", ".dcd", ".xyz"]);
-const VESTA_EXTS = new Set([".data", ".cif", ".xsf", ".vesta"]);
 
 /** 产物文件卡片 (内容区由父级渲染) */
 export default function JobFiles({ jobId }: { jobId: string }) {
@@ -133,30 +130,49 @@ export default function JobFiles({ jobId }: { jobId: string }) {
 
 function OpenWithTool({ jobId, path, ext }: { jobId: string; path: string; ext: string }) {
   const items: { key: string; label: string; tool: 'vmd' | 'vesta' }[] = [];
-  if (VMD_EXTS.has(ext)) items.push({ key: "vmd", label: "用 VMD 打开", tool: "vmd" });
-  if (VESTA_EXTS.has(ext)) items.push({ key: "vesta", label: "用 Vesta 打开", tool: "vesta" });
+  if (supports("vmd", ext)) items.push({ key: "vmd", label: "用 VMD 打开", tool: "vmd" });
+  if (supports("vesta", ext)) items.push({ key: "vesta", label: "用 Vesta 打开", tool: "vesta" });
+  // 兜底: 即便扩展名不在 VESTA 支持列表, 也允许 VESTA 尝试打开 (后端 .data 会自动转 .xyz)
+  if (items.length === 0 && (ext === ".data" || ext === "")) {
+    items.push({ key: "vesta", label: "用 Vesta 打开 (.data 将转 .xyz)", tool: "vesta" });
+  }
   if (items.length === 0) return null;
 
   const launch = async (tool: 'vmd' | 'vesta') => {
     try {
-      const r = await fetch("/api/jobs/" + encodeURIComponent(jobId)).then(x => x.json());
+      const resp = await fetch("/api/jobs/" + encodeURIComponent(jobId));
+      if (!resp.ok) { message.error("任务详情获取失败 (可能已被删除)"); return; }
+      const r = await resp.json();
       const ws = r.workspace as string | null;
       if (!ws) { message.error("任务工作区不可用"); return; }
       const abs = ws.split("\\").join("/") + "/" + path;
-      const launcher = await api.localToolLauncher(tool, abs);
-      const blob = new Blob([launcher.content], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = launcher.filename;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      if (!launcher.found) {
-        message.warning(`未检测到 ${tool.toUpperCase()} 可执行文件; 下载的启动器会提示, 请先在仪表盘「本地工具」浮窗配置路径`);
-      } else {
-        message.success(`已下载 ${launcher.filename} — 双击运行即可打开 ${tool.toUpperCase()}`);
+      // 真一键: 后端 spawn .exe; 不可用时降级 launcher 下载
+      const hide = message.loading(`正在启动 ${tool.toUpperCase()}…`, 0);
+      try {
+        const result = await api.openWithTool(tool, abs, true);
+        hide();
+        if (result.ok && result.spawned) {
+          message.success(`已启动 ${tool.toUpperCase()} (pid ${result.pid ?? "?"})`);
+          return;
+        }
+        // spawn 失败/不支持: 降级 launcher
+        if (result.fallback === "launcher" && result.content) {
+          const blob = new Blob([result.content], { type: "text/plain;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = result.filename || `open-${tool}.bat`;
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(url);
+          message.warning(result.message || `已下载启动器, 请双击运行`);
+        } else {
+          message.error(result.message || `启动失败`);
+        }
+      } catch (e) {
+        hide();
+        message.error(`启动失败: ${e instanceof Error ? e.message : String(e)}`);
       }
     } catch (e) {
-      message.error(`启动器生成失败: ${e instanceof Error ? e.message : String(e)}`);
+      message.error(`任务信息获取失败: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -165,7 +181,7 @@ function OpenWithTool({ jobId, path, ext }: { jobId: string; path: string; ext: 
       menu={{ items: items.map(it => ({ key: it.key, label: it.label, onClick: () => launch(it.tool) })) }}
       trigger={["click"]}
     >
-      <button className="row-run" title="用本地工具打开 (下载一键启动器)" type="button">
+      <button className="row-run" title="用本地工具打开" type="button">
         <ToolOutlined />
       </button>
     </Dropdown>

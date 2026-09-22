@@ -20,11 +20,12 @@
   },
   "cif_binding": {
     "oh_frac_z_min": 0.289,
-    "oh_frac_z_max": 0.296,
+    "oh_frac_z_max": 0.2925,
     "z_ob_max": 1.5,
     "z_obos_max": 3.0,
     "z_oh_min": 3.5,
-    "z_oh_max": 5.5
+    "z_oh_max": 5.5,
+    "_comment": "oh_frac_z_max 0.296→0.2925 (2026-09-04 修复): CIF 中 O10/O22 (z_frac 0.2908) 为真羟基, O11/O12/O23/O24 (0.2941) 为接 Si 顶氧 — 旧阈值把 16 个顶氧误判为 oh 并加 H, H 距 Si 仅 0.616 Å (库仑斥力爆炸 → nve/limit 伪稳态 4260K 根因)。0.2925 = 两 z 值中点。换 CIF 需重新标定。"
   },
   "atom_types": [
     {"id": 1, "name": "ob", "charge": -0.8, "mass": 15.999, "eps": 0.15539, "sigma": 3.1655,

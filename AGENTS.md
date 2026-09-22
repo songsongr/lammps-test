@@ -20,10 +20,10 @@ LAMMPS 分子动力学模拟项目 + **控制中心工作台**（Web 操控层�
 .
 ├── AGENTS.md                  # 本文件（agent 规范指引）
 ├── ARCHITECTURE.md            # 当前架构总览 (双空间设计)
-├── docs/                      # 详细文档（入口: docs/README.md）
+├── docs/                      # 详细文档（入口: docs/README.md; 路线图: docs/roadmap.md）
 ├── workbench/                 # 控制中心工作台 (FastAPI + React; README.md)
 │   ├── backend/app/           # 任务管理/体系模板/失败解析/thermo (routers + job_manager)
-│   ├── backend/templates/     # 方法模板 (nvt_production)
+│   ├── backend/templates/     # 方法模板 (nvt_production / relax_production 多段弛豫)
 │   ├── frontend/              # React SPA (构建产物由后端托管)
 │   └── data/                  # 运行时 (任务库/日志, gitignore)
 ├── common/                    # 共享引擎
@@ -46,6 +46,7 @@ LAMMPS 分子动力学模拟项目 + **控制中心工作台**（Web 操控层�
 │   │   └── post_process.py archive/
 │   └── demos/                 # 教学/环境验证 (自包含脚本, 无体系数据层)
 ├── projects/                  # 用户自建项目 (project.json 自动注册)
+├── skills/lammps-diagnose/    # 可安装 agent skill (任务诊断; 配合 work diagnose CLI)
 ├── lammps-data-docker/        # 容器 /data 数据目录 (任务工作区, gitignore)
 ├── manual_md/                 # LAMMPS 官方手册转 Markdown（索引: manual_md/README.md）
 └── tests/                     # 78 单元测试 (pytest)
@@ -129,6 +130,7 @@ uv run pytest tests/ -q
 - LAMMPS 可执行文件不在 Windows PATH 中，必须经容器运行
 - projects/ 下**非空**目录缺 project.json 会被兜底注册（`unregistered: true`，id=目录名）；
   空目录不注册。为用户建项目时始终写全 manifest，避免界面出现「未注册」角标
-- 手动 CLI 跑的任务（`uv run run-sr-sim` 等）**不进工作台任务记录**；代用户跑模拟请从工作台发起
-  （或 API `POST /api/jobs`），否则界面无日志/曲线/记录可查
+- CLI 任务 (`uv run run-sr-sim` 等) **已入工作台任务记录** (source=cli, 双入口同一本账);
+  但运行中的 CLI 任务工作台不可取消 (终端 Ctrl+C), 诊断用
+  `uv run python -m workbench.backend.app.diagnose --job <id> --json`
 - 容器/环境状态与修复记录 → [docs/environment.md](docs/environment.md)
